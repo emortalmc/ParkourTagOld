@@ -8,14 +8,28 @@ import emortal.parkourtag.game.ParkourTagGame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.minestom.server.MinecraftServer
 import net.minestom.server.extensions.Extension
 import world.cepi.kstom.Manager
+import java.io.File
 
 class ParkourTagExtension : Extension() {
 
     override fun initialize() {
         val flatWorldInstance = Manager.instance.createInstanceContainer()
         flatWorldInstance.chunkGenerator = FlatWorldGenerator
+        val path = MinecraftServer.getExtensionManager().extensionFolder.path + "/ParkourTag"
+        val directory = File(path)
+        val locations = File("$path/locations.yaml")
+
+        if(!directory.exists()){
+            directory.mkdir()
+            locations.createNewFile()
+        }
+        if(!locations.exists()){
+            locations.createNewFile()
+        }
+
 
         GameManager.registerGame<ParkourTagGame>(
             GameTypeInfo(
@@ -35,11 +49,11 @@ class ParkourTagExtension : Extension() {
             )
         )
 
-        logger.info("[LobbyExtension] Initialized!")
+        logger.info("[ParkourTag] Initialized!")
     }
 
     override fun terminate() {
-        logger.info("[LobbyExtension] Terminated!")
+        logger.info("[ParkourTag] Terminated!")
     }
 
 }

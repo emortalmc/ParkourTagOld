@@ -39,9 +39,9 @@ dependencies {
 
     compileOnly("com.github.Minestom:Minestom:2ef8e957a0")
     compileOnly("com.github.Project-Cepi:KStom:4d5b02905d")
-    compileOnly("com.github.EmortalMC:Immortal:d7dfb773ee")
+    compileOnly("com.github.EmortalMC:Immortal:e2ef76d000")
     implementation("net.kyori:adventure-text-minimessage:4.1.0-SNAPSHOT")
-
+    implementation("org.yaml:snakeyaml:1.21")
     // import kotlinx serialization
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2")
 }
@@ -74,13 +74,16 @@ tasks {
     test { useJUnitPlatform() }
 
     // Make build depend on shadowJar as shading dependencies will most likely be required.
-    build { dependsOn(shadowJar) }
+    build {
+        dependsOn(shadowJar)
+    }
 
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
+
 }
 
 
