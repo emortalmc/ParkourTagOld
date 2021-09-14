@@ -1,5 +1,5 @@
 {
   "entrypoint": "${project.group}.${project.mainClass}",
-  "name": "${project.name}",
+  "name": "ParkourTag",
   "version": "${project.version}"
 }
