@@ -1,4 +1,4 @@
-package emortal.parkourtag.game
+package dev.emortal.parkourtag.game
 
 import net.kyori.adventure.text.Component
 import net.minestom.server.entity.GameMode

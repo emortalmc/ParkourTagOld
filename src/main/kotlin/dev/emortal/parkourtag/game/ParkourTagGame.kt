@@ -1,12 +1,12 @@
-package emortal.parkourtag.game
+package dev.emortal.parkourtag.game
 
 import emortal.immortal.game.Game
 import emortal.immortal.game.GameOptions
-import emortal.parkourtag.Locations
-import emortal.parkourtag.Utils
-import emortal.parkourtag.game.ParkourTagPlayer.cleanup
-import emortal.parkourtag.game.ParkourTagPlayer.isTagged
-import emortal.parkourtag.game.ParkourTagPlayer.isTagger
+import dev.emortal.parkourtag.Locations
+import dev.emortal.parkourtag.Utils
+import dev.emortal.parkourtag.game.ParkourTagPlayer.cleanup
+import dev.emortal.parkourtag.game.ParkourTagPlayer.isTagged
+import dev.emortal.parkourtag.game.ParkourTagPlayer.isTagger
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor

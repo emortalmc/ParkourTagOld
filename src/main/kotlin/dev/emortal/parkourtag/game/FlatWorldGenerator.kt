@@ -1,4 +1,4 @@
-package emortal.parkourtag.game
+package dev.emortal.parkourtag.game
 
 import net.minestom.server.instance.ChunkGenerator
 import net.minestom.server.instance.ChunkPopulator

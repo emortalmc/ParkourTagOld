@@ -1,4 +1,4 @@
-package emortal.parkourtag
+package dev.emortal.parkourtag
 
 class Locations {
     var taggerSpawn: String? = null

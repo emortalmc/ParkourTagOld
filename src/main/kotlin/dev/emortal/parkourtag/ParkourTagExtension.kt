@@ -1,10 +1,10 @@
-package emortal.parkourtag
+package dev.emortal.parkourtag
 
 import emortal.immortal.game.GameManager
 import emortal.immortal.game.GameOptions
 import emortal.immortal.game.GameTypeInfo
-import emortal.parkourtag.game.FlatWorldGenerator
-import emortal.parkourtag.game.ParkourTagGame
+import dev.emortal.parkourtag.game.FlatWorldGenerator
+import dev.emortal.parkourtag.game.ParkourTagGame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
