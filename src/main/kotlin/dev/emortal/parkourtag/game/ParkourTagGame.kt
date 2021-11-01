@@ -1,46 +1,40 @@
 package dev.emortal.parkourtag.game
 
-import emortal.immortal.game.Game
-import emortal.immortal.game.GameOptions
-import dev.emortal.parkourtag.Locations
-import dev.emortal.parkourtag.Utils
-import dev.emortal.parkourtag.game.ParkourTagPlayer.cleanup
-import dev.emortal.parkourtag.game.ParkourTagPlayer.isTagged
-import dev.emortal.parkourtag.game.ParkourTagPlayer.isTagger
+import dev.emortal.immortal.game.GameOptions
+import dev.emortal.immortal.game.PvpGame
+import dev.emortal.immortal.util.SuperflatGenerator
+import dev.emortal.parkourtag.ParkourTagExtension
+import dev.emortal.parkourtag.utils.parsed
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.title.Title
-import net.minestom.server.MinecraftServer
-import net.minestom.server.coordinate.Pos
-import net.minestom.server.coordinate.Vec
+import net.minestom.server.entity.Entity
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
 import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.player.PlayerStartFlyingEvent
+import net.minestom.server.instance.Instance
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.timer.Task
-import org.yaml.snakeyaml.Yaml
+import world.cepi.kstom.Manager
+import world.cepi.kstom.adventure.asMini
+import world.cepi.kstom.adventure.sendMiniMessage
 import world.cepi.kstom.event.listenOnly
 import world.cepi.kstom.util.MinestomRunnable
-import java.io.File
-import java.io.FileInputStream
+import world.cepi.particle.Particle
+import world.cepi.particle.ParticleType
+import world.cepi.particle.data.OffsetAndSpeed
+import world.cepi.particle.showParticle
 import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
 
-class ParkourTagGame(gameOptions: GameOptions) : Game(gameOptions) {
-    private val goons = mutableListOf<Player>()
-    private val tagged = mutableListOf<Player>()
-    private val taggers = mutableListOf<Player>()
-    private val cooldownMap = mutableMapOf<Player, Long>()
-    private val path = MinecraftServer.getExtensionManager().extensionFolder.path + "/ParkourTag"
-    private val locations = File("$path/locations.yaml")
-    private val yaml = Yaml()
-    private val locs: Locations = yaml.load(FileInputStream(locations))
-    val parsedLocs: List<Pos> = Utils.parseLocations(locs)
+class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
+    private val goons: MutableSet<Player> = ConcurrentHashMap.newKeySet()
+    private val taggers: MutableSet<Player> = ConcurrentHashMap.newKeySet()
 
-    private var picked: Player? = null
     private var timer: Task? = null
 
     private val taggerTitle = Title.title(
@@ -69,161 +63,122 @@ class ParkourTagGame(gameOptions: GameOptions) : Game(gameOptions) {
     }
 
     override fun playerLeave(player: Player) {
-
+        taggers.remove(player)
+        goons.remove(player)
     }
 
-    override fun start() {
+    override fun gameStarted() {
 
         object : MinestomRunnable() {
-            var loop = 12
+            var loop = 30
 
             override fun run() {
+                val picked = players.random()
+
+                playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
+                showTitle(
+                    Title.title(
+                        Component.text(picked.username, NamedTextColor.GREEN, TextDecoration.BOLD),
+                        Component.empty(),
+                        Title.Times.of(
+                            Duration.ZERO, Duration.ofSeconds(2), Duration.ZERO
+                        )
+                    )
+                )
+
                 if (loop < 1) {
-                    picked = players.random()
-                    playerAudience.playSound(Sound.sound(SoundEvent.ENTITY_ENDER_DRAGON_GROWL, Sound.Source.HOSTILE, 1f, 0.5f))
-                    playerAudience.showTitle(
-                        Title.title(
-                            Component.text(Utils.componentToString(picked!!.name), NamedTextColor.RED, TextDecoration.BOLD),
-                            Component.empty(),
-                            Title.Times.of(
-                                Duration.ZERO, Duration.ofSeconds(3), Duration.ofMillis(250)
-                            )
+                    playSound(
+                        Sound.sound(
+                            SoundEvent.ENTITY_ENDER_DRAGON_GROWL,
+                            Sound.Source.HOSTILE,
+                            1f,
+                            0.5f
                         )
                     )
 
+                    taggers.add(picked)
                     setupGame()
-
                     cancel()
                     return
                 }
 
-                playerAudience.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
-                playerAudience.showTitle(
-                    Title.title(
-                        Component.text(Utils.componentToString(players.random().name), NamedTextColor.GREEN, TextDecoration.BOLD),
-                        Component.empty(),
-                        Title.Times.of(
-                            Duration.ZERO, Duration.ofSeconds(2), Duration.ofMillis(250)
-                        )
-                    )
-                )
-
                 loop--
             }
-        }.repeat(Duration.ofMillis(300)).schedule()
+        }.repeat(Duration.ofMillis(100)).schedule()
     }
 
     override fun registerEvents() {
         eventNode.listenOnly<EntityAttackEvent> {
-            if(target !is Player || entity !is Player) return@listenOnly
+            if (target !is Player || entity !is Player) return@listenOnly
+
             val target = target as Player
             val attacker = entity as Player
-            if(attacker.isTagger && !target.isTagger && !target.isTagged){
-                players.forEach {
-                    it.sendMessage(
-                        Component.text("☠ | ", NamedTextColor.WHITE)
-                            .append(Component.text(Utils.componentToString(attacker.name), NamedTextColor.RED, TextDecoration.BOLD))
-                            .append(Component.text(" tagged ", NamedTextColor.GRAY))
-                            .append(Component.text(Utils.componentToString(target.name), NamedTextColor.GREEN, TextDecoration.BOLD))
-                            .append(Component.text("!", NamedTextColor.GRAY))
-                    )
-                }
-                attacker.playSound(Sound.sound(SoundEvent.ENTITY_EXPERIENCE_ORB_PICKUP, Sound.Source.AMBIENT, 1f, 1.2f))
-                tag(target)
+
+            if (target.gameMode != GameMode.ADVENTURE || attacker.gameMode != GameMode.ADVENTURE) return@listenOnly
+
+            if (taggers.contains(attacker) && !taggers.contains(target)) {
+                sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><white>${attacker.username}</white> tagged <red>${target.username}</red>")
+                attacker.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.AMBIENT, 1f, 1f))
+
+                showParticle(
+                    Particle.particle(
+                        type = ParticleType.LARGE_SMOKE,
+                        count = 15,
+                        data = OffsetAndSpeed(1f, 1f, 1f, 0.04f),
+                    ),
+                    target.position.asVec()
+                )
+
+                kill(target, null)
             }
         }
 
         eventNode.listenOnly<PlayerStartFlyingEvent> {
-            player.isFlying = false
+            if (!taggers.contains(player)) return@listenOnly
 
-            if(!player.isTagger) return@listenOnly
-            if(cooldownMap[player]!! > System.currentTimeMillis()){
-                val timeLeft = cooldownMap[player]!! - System.currentTimeMillis()
-                player.sendActionBar(
-                    Component.text("Double jump is on cooldown for ", NamedTextColor.GRAY)
-                        .append(
-                            Component.text(java.util.concurrent.TimeUnit.MILLISECONDS.toSeconds(timeLeft) + 1,
-                                NamedTextColor.RED,
-                                TextDecoration.BOLD
-                            )
-                        )
-                        .append(
-                            Component.text(" seconds",
-                                NamedTextColor.GRAY
-                            )
-                        )
+            player.isFlying = false
+            player.isAllowFlying = false
+            player.velocity = player.position.direction().mul(20.0).withY(15.0)
+            player.viewersAsAudience.playSound(
+                Sound.sound(
+                    SoundEvent.ENTITY_GENERIC_EXPLODE,
+                    Sound.Source.PLAYER,
+                    1f,
+                    1.5f
                 )
-                return@listenOnly
-            }
-            cooldownMap[player] = System.currentTimeMillis() + 3000
-            val vec: Vec = player.position.direction().mul(14.0).withY(10.0)
-            player.velocity = vec
+            )
+
+            object : MinestomRunnable() {
+                var i = 3
+
+                override fun run() {
+                    i--
+
+                    if (i < 0) {
+                        player.isAllowFlying = true
+                        player.sendActionBar(Component.empty())
+
+                        cancel()
+                        return
+                    }
+
+                    player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${i + 1}s".asMini())
+
+                }
+            }.repeat(Duration.ofSeconds(1)).schedule()
+
         }
     }
 
-    private fun setupGame(){
-
-        object : MinestomRunnable(){
-            override fun run() {
-                addTagger(picked!!)
-                players.forEach { player ->
-                    if(!player.isTagger){
-                        goons.add(player)
-                    }
-                }
-
-                taggers.forEach {
-                    it.showTitle(
-                        taggerTitle
-                    )
-                    cooldownMap[it] = System.currentTimeMillis()
-                    it.teleport(parsedLocs[0])
-                    it.isGlowing = true
-                }
-
-                goons.forEach {
-                    it.showTitle(
-                        goonTitle
-                    )
-                    it.teleport(parsedLocs[1])
-                }
-
-                scoreboard!!.createLine(Sidebar.ScoreboardLine(
-                    "time_left",
-                    Component.text("Time left: ${Utils.secondsToParsed(90)}"),
-                    4
-                ))
-                scoreboard!!.createLine(Sidebar.ScoreboardLine(
-                    "goons_left",
-                    Component.text("Goons: ", NamedTextColor.GREEN)
-                        .append(Component.text(goons.size, NamedTextColor.RED)),
-                    2
-                ))
-
-                scoreboard!!.createLine(Sidebar.ScoreboardLine(
-                    "tagger",
-                    Component.text("Tagger: ", NamedTextColor.GREEN)
-                        .append(Component.text(Utils.componentToString(picked!!.name), NamedTextColor.RED)),
-                    0
-                ))
-
-                startTimer()
-            }
-        }.delay(Duration.ofSeconds(3)).schedule()
-
-    }
-
-    private fun addTagger(player: Player){
-        taggers.add(player)
-        player.isTagger = true
-    }
-    private fun tag(player: Player){
+    override fun playerDied(player: Player, killer: Entity?) {
         goons.remove(player)
 
-        scoreboard!!.updateLineContent("goons_left", Component.text("Goons: ", NamedTextColor.GREEN)
-            .append(Component.text(goons.size, NamedTextColor.RED)))
+        scoreboard!!.updateLineContent(
+            "goons_left", Component.text("Goons: ", NamedTextColor.GREEN)
+                .append(Component.text(goons.size, NamedTextColor.RED))
+        )
 
-        if(goons.size == 0){
+        if (goons.size == 0) {
             winTaggers()
             object : MinestomRunnable() {
                 override fun run() {
@@ -232,82 +187,126 @@ class ParkourTagGame(gameOptions: GameOptions) : Game(gameOptions) {
             }.delay(Duration.ofSeconds(8)).schedule()
         }
 
-        tagged.add(player)
         player.gameMode = GameMode.SPECTATOR
-        player.isTagged = true
         player.isInvisible = true
     }
 
+    override fun respawn(player: Player) {
 
-    fun startTimer(){
-        timer = object : MinestomRunnable(){
+    }
+
+    private fun setupGame() {
+
+        object : MinestomRunnable() {
+            override fun run() {
+                goons.addAll(players.filter { !taggers.contains(it) })
+
+                goons.forEach {
+                    it.showTitle(goonTitle)
+                    it.teleport(ParkourTagExtension.config.goonSpawnPos)
+                }
+
+                taggers.forEach {
+                    it.showTitle(taggerTitle)
+                    it.teleport(ParkourTagExtension.config.taggerSpawnPos)
+                    it.isGlowing = true
+                }
+
+                scoreboard!!.createLine(
+                    Sidebar.ScoreboardLine(
+                        "time_left",
+                        Component.text("Time left: ${90.parsed()}"),
+                        4
+                    )
+                )
+                scoreboard!!.createLine(
+                    Sidebar.ScoreboardLine(
+                        "goons_left",
+                        Component.text("Goons: ", NamedTextColor.GREEN)
+                            .append(Component.text(goons.size, NamedTextColor.RED)),
+                        2
+                    )
+                )
+
+                scoreboard!!.createLine(
+                    Sidebar.ScoreboardLine(
+                        "tagger",
+                        "<green>Taggers: <dark_green>${taggers.joinToString { it.username }}".asMini(),
+                        0
+                    )
+                )
+
+                startTimer()
+            }
+        }.delay(Duration.ofSeconds(3)).schedule()
+
+    }
+
+    fun startTimer() {
+        timer = object : MinestomRunnable() {
             var timeLeft = 90
 
-
             override fun run() {
-                when(timeLeft) {
-                    60 ->{
+                when (timeLeft) {
+                    60 -> {
                         taggers.forEach {
                             it.isAllowFlying = true
                             it.sendMessage(Component.text("Double jump enabled!", NamedTextColor.GRAY))
                         }
                     }
-                    30 ->{
-                        taggers.forEach {
-                            it.isGlowing = false
-                            it.sendMessage(Component.text("Goons are now glowing!", NamedTextColor.GRAY))
-                        }
+                    30 -> {
                         goons.forEach {
                             it.isGlowing = true
                         }
                         players.forEach {
-                            it.sendMessage(Component.text("Taggers are hidden!", NamedTextColor.GRAY))
+                            it.sendMessage(Component.text("Goons are now glowing!", NamedTextColor.GRAY))
                         }
                     }
                     0 -> {
                         winGoons()
-                        object : MinestomRunnable() {
-                            override fun run() {
-                                destroy()
-                            }
-                        }.delay(Duration.ofSeconds(8)).schedule()
-                        cancel()
+                        Manager.scheduler.buildTask { destroy() }.delay(Duration.ofSeconds(5)).schedule()
                         return
                     }
                 }
                 scoreboard!!.updateLineContent(
                     "time_left",
-                    Component.text("Time left: ${Utils.secondsToParsed(timeLeft)}")
+                    Component.text("Time left: ${timeLeft.parsed()}")
                 )
                 timeLeft--
             }
         }.repeat(Duration.ofSeconds(1)).schedule()
     }
 
-    fun winGoons(){
-        players.forEach {
-            it.showTitle(
-                goonVictoryTitle
-            )
-        }
+    fun winGoons() {
+        timer?.cancel()
 
-    }
-    fun winTaggers(){
-        timer!!.cancel()
         players.forEach {
-            it.showTitle(
-                taggerVictoryTitle
-            )
+            it.showTitle(goonVictoryTitle)
         }
-
     }
 
-    override fun postDestroy() {
+    fun winTaggers() {
+        timer?.cancel()
 
+        players.forEach {
+            it.showTitle(taggerVictoryTitle)
+        }
+    }
+
+    override fun gameDestroyed() {
         instance.players.forEach {
-            it.cleanup()
             it.isInvisible = false
-            it.teleport(parsedLocs[2])
+            it.isGlowing = false
+            it.isAllowFlying = false
+            it.isFlying = false
         }
     }
+
+    override fun instanceCreate(): Instance {
+        val instance = Manager.instance.createInstanceContainer()
+        instance.chunkGenerator = SuperflatGenerator
+
+        return instance
+    }
+
 }

@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin.
@@ -37,13 +36,13 @@ dependencies {
     // Use the Kotlin reflect library.
     compileOnly(kotlin("reflect"))
 
-    compileOnly("com.github.Minestom:Minestom:2ef8e957a0")
-    compileOnly("com.github.Project-Cepi:KStom:4d5b02905d")
-    compileOnly("com.github.EmortalMC:Immortal:e2ef76d000")
-    implementation("net.kyori:adventure-text-minimessage:4.1.0-SNAPSHOT")
-    implementation("org.yaml:snakeyaml:1.21")
+    compileOnly("com.github.Minestom:Minestom:3be4edc096")
+    compileOnly("com.github.EmortalMC:Immortal:88b67d4701")
+
+    // TODO: get extension instead of compiling separately
+    implementation("com.github.Project-Cepi:Particable:b552376803")
     // import kotlinx serialization
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.0")
 }
 tasks.withType<Test> {
     useJUnitPlatform()
@@ -81,14 +80,13 @@ tasks {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
-
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
 }
 
-
 val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_16.toString()
 
 compileKotlin.kotlinOptions {
     freeCompilerArgs = listOf("-Xinline-classes")

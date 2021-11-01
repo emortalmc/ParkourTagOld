@@ -1,51 +1,35 @@
 package dev.emortal.parkourtag
 
-import emortal.immortal.game.GameManager
-import emortal.immortal.game.GameOptions
-import emortal.immortal.game.GameTypeInfo
-import dev.emortal.parkourtag.game.FlatWorldGenerator
+import dev.emortal.immortal.game.GameManager
+import dev.emortal.immortal.game.GameOptions
 import dev.emortal.parkourtag.game.ParkourTagGame
+import dev.emortal.parkourtag.utils.ConfigurationHelper
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import net.minestom.server.MinecraftServer
 import net.minestom.server.extensions.Extension
-import world.cepi.kstom.Manager
-import java.io.File
+import java.nio.file.Path
 
 class ParkourTagExtension : Extension() {
 
+    companion object {
+        lateinit var config: ParkourConfig
+    }
+
     override fun initialize() {
-        val flatWorldInstance = Manager.instance.createInstanceContainer()
-        flatWorldInstance.chunkGenerator = FlatWorldGenerator
-        val path = MinecraftServer.getExtensionManager().extensionFolder.path + "/ParkourTag"
-        val directory = File(path)
-        val locations = File("$path/locations.yaml")
-
-        if(!directory.exists()){
-            directory.mkdir()
-            locations.createNewFile()
-        }
-        if(!locations.exists()){
-            locations.createNewFile()
-        }
-
+        config = ConfigurationHelper.initConfigFile(Path.of("./parkour.json"), ParkourConfig())
 
         GameManager.registerGame<ParkourTagGame>(
-            GameTypeInfo(
-                eventNode,
-                "parkourtag",
-                Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
-                true,
-                GameOptions(
-                    { flatWorldInstance },
-                    8,
-                    2,
-                    false,
-                    true,
-                    true,
-                    true
-                )
+            eventNode,
+            "parkourtag",
+            Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
+            true,
+            GameOptions(
+                maxPlayers = 8,
+                minPlayers = 2,
+                canJoinDuringGame = false,
+                showScoreboard = true,
+                showsJoinLeaveMessages = true,
             )
         )
 
