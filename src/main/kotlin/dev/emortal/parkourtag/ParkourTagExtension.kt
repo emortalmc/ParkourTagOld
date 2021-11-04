@@ -27,6 +27,7 @@ class ParkourTagExtension : Extension() {
             GameOptions(
                 maxPlayers = 8,
                 minPlayers = 2,
+                countdownSeconds = 15,
                 canJoinDuringGame = false,
                 showScoreboard = true,
                 showsJoinLeaveMessages = true,

@@ -6,7 +6,7 @@ plugins {
     // Kotlinx serialization for any data format
     kotlin("plugin.serialization") version "1.4.21"
     // Shade the plugin
-    id("com.github.johnrengelman.shadow") version "7.0.0"
+    id("com.github.johnrengelman.shadow") version "7.1.0"
     // Allow publishing
     `maven-publish`
 
@@ -36,13 +36,16 @@ dependencies {
     // Use the Kotlin reflect library.
     compileOnly(kotlin("reflect"))
 
-    compileOnly("com.github.Minestom:Minestom:3be4edc096")
-    compileOnly("com.github.EmortalMC:Immortal:88b67d4701")
+    compileOnly("com.github.Minestom:Minestom:0bcfc39a9d")
+    compileOnly("com.github.EmortalMC:Immortal:872726deb6")
 
     // TODO: get extension instead of compiling separately
     implementation("com.github.Project-Cepi:Particable:b552376803")
     // import kotlinx serialization
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.0")
+
+
+    implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 }
 tasks.withType<Test> {
     useJUnitPlatform()
