@@ -8,6 +8,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.extensions.Extension
+import java.io.File
 import java.nio.file.Path
 
 class ParkourTagExtension : Extension() {
@@ -17,7 +18,19 @@ class ParkourTagExtension : Extension() {
     }
 
     override fun initialize() {
-        config = ConfigurationHelper.initConfigFile(Path.of("./parkour.json"), ParkourConfig())
+        val maps = File("./maps/").listFiles().map { it.nameWithoutExtension }
+        logger.info("Found ${maps.size} maps: \n- ${maps.joinToString("\n- ")}")
+
+        val parkourConfig = ParkourConfig()
+        val mapConfigMap = hashMapOf<String, MapConfig>()
+
+        maps.forEach {
+            mapConfigMap[it] = MapConfig()
+        }
+
+
+        parkourConfig.mapSpawnPositions = mapConfigMap
+        config = ConfigurationHelper.initConfigFile(Path.of("./parkour.json"), parkourConfig)
 
         GameManager.registerGame<ParkourTagGame>(
             eventNode,

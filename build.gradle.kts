@@ -37,10 +37,10 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     compileOnly("com.github.Minestom:Minestom:0bcfc39a9d")
-    compileOnly("com.github.EmortalMC:Immortal:872726deb6")
+    compileOnly("com.github.EmortalMC:Immortal:c0280c69dd")
 
     // TODO: get extension instead of compiling separately
-    implementation("com.github.Project-Cepi:Particable:b552376803")
+    compileOnly("com.github.Project-Cepi:Particable:b552376803")
     // import kotlinx serialization
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.0")
 

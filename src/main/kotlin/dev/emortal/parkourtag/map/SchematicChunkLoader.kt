@@ -5,6 +5,7 @@ import com.google.common.collect.Table
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import net.minestom.server.MinecraftServer
+import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.metadata.other.ItemFrameMeta
@@ -21,12 +22,11 @@ import net.minestom.server.utils.chunk.ChunkUtils
 import net.minestom.server.world.biomes.Biome
 import org.krystilize.blocky.data.NbtData
 import org.krystilize.blocky.sponge.SpongeSchematicData
-import org.krystilize.blocky.sponge.SpongeSchematicData.SpongeEntity
 import world.cepi.kstom.Manager
 import java.util.*
 import java.util.concurrent.CompletableFuture
 
-class SchematicChunkLoader(vararg schematics: SpongeSchematicData) : IChunkLoader {
+class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSchematicData) : IChunkLoader {
     private val blocks: Long2ObjectMap<Array<BlockEntry>> = Long2ObjectOpenHashMap()
 
     private data class BlockEntry(val pos: Int, val block: Block)
@@ -51,41 +51,52 @@ class SchematicChunkLoader(vararg schematics: SpongeSchematicData) : IChunkLoade
         return CompletableFuture.completedFuture(null)
     }
 
-    companion object {
-        fun generateEntity(spongeEntity: SpongeEntity): Entity {
-            println(spongeEntity.id)
-            val entityType = EntityType.fromNamespaceId(spongeEntity.id)
+    fun generateEntity(spongeEntity: SpongeSchematicData.SpongeEntity) {
+        println("Generating entity '${spongeEntity.id}'")
+        val entityType = EntityType.fromNamespaceId(spongeEntity.id)
 
-            // We only want item frames
-            if (entityType != EntityType.ITEM_FRAME || entityType == null) {
-                throw NotImplementedError("Only ITEM_FRAME has been implemented so far.")
-            }
-            val entity = Entity(entityType)
-            val nbt = spongeEntity.nbtData()
-            val itemFrameMeta = entity.entityMeta as ItemFrameMeta
-            val rotation = nbt.get<Byte>("ItemRotation")
-            itemFrameMeta.rotation = Rotation.values()[rotation.toInt()]
-            val orientation = nbt.get<Byte>("Facing")
-            for (value in ItemFrameMeta.Orientation.values()) {
-                if (value.ordinal == orientation.toInt()) {
-                    itemFrameMeta.orientation = value
-                }
-            }
-
-            // Item
-            val item = nbt.get<NbtData>("Item")
-            val tag = item.get<NbtData>("tag")
-            val id = item.get<String>("id")
-            val cmd = tag.get<Int>("CustomModelData")
-            val mat = Material.fromNamespaceId(id)
-            Objects.requireNonNull(mat, "mat was null")
-            val itemStack = ItemStack.builder(mat!!)
-                .meta { meta: ItemMetaBuilder -> meta.customModelData(cmd) }
-                .build()
-            itemFrameMeta.item = itemStack
-
-            return entity
+        // We only want item frames
+        if (entityType != EntityType.ITEM_FRAME || entityType == null) {
+            return
         }
+
+        val entity = when (entityType) {
+            EntityType.ITEM_FRAME, EntityType.GLOW_ITEM_FRAME -> {
+                val entity = Entity(entityType)
+                val nbt = spongeEntity.nbtData()
+                val itemFrameMeta = entity.entityMeta as ItemFrameMeta
+                val rotation = nbt.get<Byte>("ItemRotation")
+                itemFrameMeta.rotation = Rotation.values()[rotation.toInt()]
+                val orientation = nbt.get<Byte>("Facing")
+                for (value in ItemFrameMeta.Orientation.values()) {
+                    if (value.ordinal == orientation.toInt()) {
+                        itemFrameMeta.orientation = value
+                    }
+                }
+
+                // Item
+                val item = nbt.get<NbtData>("Item")
+                val tag = item.get<NbtData>("tag")
+                val id = item.get<String>("id")
+                val cmd = tag.get<Int>("CustomModelData")
+                val mat = Material.fromNamespaceId(id)
+                Objects.requireNonNull(mat, "mat was null")
+                val itemStack = ItemStack.builder(mat!!)
+                    .meta { meta: ItemMetaBuilder -> meta.customModelData(cmd) }
+                    .build()
+                itemFrameMeta.item = itemStack
+
+                entity
+            }
+            else -> null
+        }
+
+
+
+        entity?.setInstance(
+            instance,
+            Pos(spongeEntity.x, spongeEntity.y, spongeEntity.z, spongeEntity.yaw, spongeEntity.pitch)
+        )
     }
 
     init {
@@ -123,6 +134,10 @@ class SchematicChunkLoader(vararg schematics: SpongeSchematicData) : IChunkLoade
                 val blockIndex = ChunkUtils.getBlockIndex(block.x(), block.y(), block.z())
                 allBlocks.put(chunkIndex, blockIndex, minestomBlock)
             }
+
+            schematic.allEntities.forEach {
+                generateEntity(it)
+            }
         }
 
         // Create block entries and the block entry arrays
@@ -135,5 +150,7 @@ class SchematicChunkLoader(vararg schematics: SpongeSchematicData) : IChunkLoade
                 .toTypedArray()
             blocks[chunkIndex as Long] = entries
         }
+
+
     }
 }
