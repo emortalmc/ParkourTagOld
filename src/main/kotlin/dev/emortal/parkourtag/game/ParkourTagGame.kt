@@ -144,7 +144,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
     }
 
-    fun registerEventsPostStart() = with(eventNode) {
+    override fun registerEvents() = with(eventNode) {
         listenOnly<EntityAttackEvent> {
             if (target !is Player || entity !is Player || gameState == GameState.ENDING) return@listenOnly
 
@@ -231,10 +231,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
     }
 
-    override fun registerEvents() {
-
-    }
-
     override fun playerDied(player: Player, killer: Entity?) {
         goonsTeam.remove(player)
 
@@ -297,7 +293,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     )
                 )
 
-                Manager.scheduler.buildTask { registerEventsPostStart() }
+                Manager.scheduler.buildTask { registerEvents() }
                     .delay(Duration.ofSeconds(2))
                     .schedule()
 

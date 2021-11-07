@@ -37,7 +37,7 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     compileOnly("com.github.Minestom:Minestom:0bcfc39a9d")
-    compileOnly("com.github.EmortalMC:Immortal:c0280c69dd")
+    compileOnly("com.github.EmortalMC:Immortal:a226a09091")
 
     // TODO: get extension instead of compiling separately
     compileOnly("com.github.Project-Cepi:Particable:b552376803")

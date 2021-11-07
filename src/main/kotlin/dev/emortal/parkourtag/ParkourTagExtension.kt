@@ -2,6 +2,7 @@ package dev.emortal.parkourtag
 
 import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameOptions
+import dev.emortal.immortal.game.WhenToRegisterEvents
 import dev.emortal.parkourtag.game.ParkourTagGame
 import dev.emortal.parkourtag.utils.ConfigurationHelper
 import net.kyori.adventure.text.Component
@@ -37,6 +38,7 @@ class ParkourTagExtension : Extension() {
             "parkourtag",
             Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
             true,
+            WhenToRegisterEvents.NEVER,
             GameOptions(
                 maxPlayers = 8,
                 minPlayers = 2,
