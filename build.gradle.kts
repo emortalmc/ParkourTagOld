@@ -42,7 +42,7 @@ dependencies {
     // TODO: get extension instead of compiling separately
     compileOnly("com.github.Project-Cepi:Particable:b552376803")
     // import kotlinx serialization
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
 
 
     implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
