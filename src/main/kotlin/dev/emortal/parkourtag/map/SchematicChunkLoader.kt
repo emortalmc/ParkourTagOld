@@ -8,6 +8,7 @@ import net.minestom.server.MinecraftServer
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
+import net.minestom.server.entity.metadata.other.ArmorStandMeta
 import net.minestom.server.entity.metadata.other.ItemFrameMeta
 import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.DynamicChunk
@@ -37,9 +38,7 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
         if (entries == null || entries.isEmpty()) {
             return CompletableFuture.completedFuture(null)
         }
-        val biomes = arrayOfNulls<Biome>(Biome.getBiomeCount(instance.dimensionType))
-        Arrays.fill(biomes, MinecraftServer.getBiomeManager().getById(0))
-        val chunk: Chunk = DynamicChunk(instance, biomes, chunkX, chunkZ)
+        val chunk: Chunk = DynamicChunk(instance, chunkX, chunkZ)
         for (entry in entries) {
             val pos = ChunkUtils.getBlockPosition(entry.pos, chunkX, chunkZ)
             chunk.setBlock(pos, entry.block)
@@ -53,12 +52,7 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
 
     fun generateEntity(spongeEntity: SpongeSchematicData.SpongeEntity) {
         println("Generating entity '${spongeEntity.id}'")
-        val entityType = EntityType.fromNamespaceId(spongeEntity.id)
-
-        // We only want item frames
-        if (entityType != EntityType.ITEM_FRAME || entityType == null) {
-            return
-        }
+        val entityType = EntityType.fromNamespaceId(spongeEntity.id) ?: return
 
         val entity = when (entityType) {
             EntityType.ITEM_FRAME, EntityType.GLOW_ITEM_FRAME -> {
@@ -100,13 +94,12 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
     }
 
     init {
-
         // Group all blocks together to be put into arrays
         val allBlocks: Table<Long, Int, Block> = HashBasedTable.create()
 
-
         // Group blocks together
         for (schematic in schematics) {
+
             for (block in schematic.allBlocks) {
                 if (block == null) continue
                 val blockString = block.blockString()

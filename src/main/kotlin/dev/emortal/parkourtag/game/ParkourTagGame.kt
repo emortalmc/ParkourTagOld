@@ -65,7 +65,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     lateinit var spawnPos: Pos
     lateinit var mapConfig: MapConfig
 
-    private var timer: Task? = null
+    private var timerTask: Task? = null
 
 
     private val taggerTitle = Title.title(
@@ -80,8 +80,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun playerJoin(player: Player) {
         player.respawnPoint = spawnPos
         player.teleport(spawnPos)
-        player.gameMode = GameMode.ADVENTURE
-        player.isInvisible = false
     }
 
     override fun playerLeave(player: Player) {
@@ -101,7 +99,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override fun gameStarted() {
 
-        scoreboard?.updateLineContent("InfoLine", Component.text("Rolling...", NamedTextColor.GRAY))
+        scoreboard?.updateLineContent("infoLine", Component.text("Rolling...", NamedTextColor.GRAY))
 
         var picked = players.random()
         (0..15).forEach {
@@ -119,7 +117,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         ),
                         Component.empty(),
                         Title.Times.of(
-                            Duration.ZERO, Duration.ofSeconds(2), Duration.ZERO
+                            Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)
                         )
                     )
                 )
@@ -136,7 +134,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                     taggersTeam.add(picked)
 
-                    scoreboard?.updateLineContent("InfoLine", Component.empty())
+                    scoreboard?.updateLineContent("infoLine", Component.empty())
 
                     setupGame()
                 }
@@ -304,7 +302,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     fun startTimer() {
-        timer = object : MinestomRunnable() {
+        timerTask = object : MinestomRunnable() {
             var timeLeft = 90
 
             override fun run() {
@@ -361,7 +359,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     fun victory(winningTeam: ParkourTagTeam) {
         gameState = GameState.ENDING
-        timer?.cancel()
+        timerTask?.cancel()
 
         scoreboard?.removeLine("tagger")
         scoreboard?.removeLine("goons_left")
@@ -401,16 +399,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun gameDestroyed() {
-        instance.players.forEach {
-            it.isInvisible = false
-            it.isGlowing = false
-            it.isAllowFlying = false
-            it.isFlying = false
-        }
     }
 
     override fun instanceCreate(): Instance {
-        val randomMap = File("./maps/").listFiles().random()
+        val randomMap = File("./maps/parkourtag/").listFiles().random()
 
         val schematic = Schematics.file(randomMap, Schemas.SPONGE)
         val data = Blocky.builder().compression(true).build().read(schematic)

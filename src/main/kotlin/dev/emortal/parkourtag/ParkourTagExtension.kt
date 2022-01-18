@@ -19,7 +19,7 @@ class ParkourTagExtension : Extension() {
     }
 
     override fun initialize() {
-        val maps = File("./maps/").listFiles().map { it.nameWithoutExtension }
+        val maps = File("./maps/parkourtag/").listFiles().map { it.nameWithoutExtension }
         logger.info("Found ${maps.size} maps: \n- ${maps.joinToString("\n- ")}")
 
         val parkourConfig = ParkourConfig()
@@ -28,7 +28,6 @@ class ParkourTagExtension : Extension() {
         maps.forEach {
             mapConfigMap[it] = MapConfig()
         }
-
 
         parkourConfig.mapSpawnPositions = mapConfigMap
         config = ConfigurationHelper.initConfigFile(Path.of("./parkour.json"), parkourConfig)
@@ -40,8 +39,8 @@ class ParkourTagExtension : Extension() {
             true,
             WhenToRegisterEvents.NEVER,
             GameOptions(
-                maxPlayers = 8,
                 minPlayers = 2,
+                maxPlayers = 8,
                 countdownSeconds = 15,
                 canJoinDuringGame = false,
                 showScoreboard = true,

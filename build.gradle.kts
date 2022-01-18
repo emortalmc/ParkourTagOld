@@ -2,18 +2,18 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin.
-    id("org.jetbrains.kotlin.jvm") version "1.5.30"
+    id("org.jetbrains.kotlin.jvm") version "1.6.10"
     // Kotlinx serialization for any data format
-    kotlin("plugin.serialization") version "1.4.21"
+    kotlin("plugin.serialization") version "1.6.10"
     // Shade the plugin
-    id("com.github.johnrengelman.shadow") version "7.1.0"
+    id("com.github.johnrengelman.shadow") version "7.1.2"
     // Allow publishing
     `maven-publish`
 
     // Apply the application plugin to add support for building a jar
     java
     // Dokka documentation w/ kotlin
-    id("org.jetbrains.dokka") version "1.5.0"
+    id("org.jetbrains.dokka") version "1.6.10"
 }
 
 repositories {
@@ -24,6 +24,7 @@ repositories {
     maven(url = "https://repo.spongepowered.org/maven")
     maven(url = "https://repo.minestom.com/repository/maven-public/")
     maven(url = "https://repo.velocitypowered.com/snapshots/")
+    maven(url = "https://repo.crystalgames.net/snapshots/")
 }
 
 dependencies {
@@ -36,16 +37,15 @@ dependencies {
     // Use the Kotlin reflect library.
     compileOnly(kotlin("reflect"))
 
-    compileOnly("com.github.Minestom:Minestom:0bcfc39a9d")
-    compileOnly("com.github.EmortalMC:Immortal:a226a09091")
-
-    // TODO: get extension instead of compiling separately
-    compileOnly("com.github.Project-Cepi:Particable:b552376803")
-    // import kotlinx serialization
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.0")
-
-
+    compileOnly("com.github.Minestom:Minestom:517d6a3b7c")
+    compileOnly("com.github.EmortalMC:Immortal:d4f53ae6ba")
+    //implementation("com.github.emortaldev:Scaffolding:b4ca83efa7")
     implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
+
+    // import kotlinx serialization
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
+
+
 }
 tasks.withType<Test> {
     useJUnitPlatform()
@@ -82,14 +82,8 @@ tasks {
 
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
 val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_16.toString()
+compileKotlin.kotlinOptions.jvmTarget = JavaVersion.VERSION_17.toString()
 
 compileKotlin.kotlinOptions {
     freeCompilerArgs = listOf("-Xinline-classes")
