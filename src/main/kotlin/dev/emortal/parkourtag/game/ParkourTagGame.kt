@@ -277,8 +277,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 scoreboard?.createLine(
                     Sidebar.ScoreboardLine(
                         "goons_left",
-                        Component.text("Goons: ", NamedTextColor.GREEN)
-                            .append(Component.text(goonsTeam.players.size, NamedTextColor.RED)),
+                        Component.text()
+                            .append(Component.text("Goons: ", NamedTextColor.GRAY))
+                            .append(Component.text(goonsTeam.players.size, NamedTextColor.RED))
+                            .build(),
                         2
                     )
                 )
@@ -286,7 +288,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 scoreboard?.createLine(
                     Sidebar.ScoreboardLine(
                         "tagger",
-                        "<green>Taggers: <dark_green>${taggersTeam.players.joinToString { it.username }}".asMini(),
+                        Component.text()
+                            .append(Component.text("Taggers: ", NamedTextColor.GRAY))
+                            .append(Component.text(taggersTeam.players.joinToString { it.username }, NamedTextColor.GOLD))
+                            .build(),
                         0
                     )
                 )
@@ -350,7 +355,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 }
                 scoreboard!!.updateLineContent(
                     "time_left",
-                    Component.text("Time left: ${timeLeft.parsed()}")
+                    Component.text()
+                        .append(Component.text("Time left: ", NamedTextColor.YELLOW))
+                        .append(Component.text(timeLeft.parsed(), NamedTextColor.GOLD))
+                        .build()
                 )
                 timeLeft--
             }
