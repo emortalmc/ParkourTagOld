@@ -23,7 +23,7 @@ class ParkourTagExtension : Extension() {
         logger.info("Found ${maps.size} maps: \n- ${maps.joinToString("\n- ")}")
 
         val parkourConfig = ParkourConfig()
-        val mapConfigMap = hashMapOf<String, MapConfig>()
+        val mapConfigMap = mutableMapOf<String, MapConfig>()
 
         maps.forEach {
             mapConfigMap[it] = MapConfig()
@@ -36,6 +36,7 @@ class ParkourTagExtension : Extension() {
             eventNode,
             "parkourtag",
             Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
+            true,
             true,
             WhenToRegisterEvents.NEVER,
             GameOptions(

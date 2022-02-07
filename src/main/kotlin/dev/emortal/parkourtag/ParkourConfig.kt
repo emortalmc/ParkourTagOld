@@ -4,5 +4,5 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 class ParkourConfig(
-    var mapSpawnPositions: HashMap<String, MapConfig> = hashMapOf()
+    var mapSpawnPositions: MutableMap<String, MapConfig> = mutableMapOf()
 )

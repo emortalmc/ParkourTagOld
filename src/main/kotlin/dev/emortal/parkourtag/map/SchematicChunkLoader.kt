@@ -1,7 +1,5 @@
 package dev.emortal.parkourtag.map
 
-import com.google.common.collect.HashBasedTable
-import com.google.common.collect.Table
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import net.minestom.server.MinecraftServer
@@ -14,6 +12,7 @@ import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.DynamicChunk
 import net.minestom.server.instance.IChunkLoader
 import net.minestom.server.instance.Instance
+import net.minestom.server.instance.batch.AbsoluteBlockBatch
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.ItemMetaBuilder
 import net.minestom.server.item.ItemStack
@@ -39,6 +38,7 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
             return CompletableFuture.completedFuture(null)
         }
         val chunk: Chunk = DynamicChunk(instance, chunkX, chunkZ)
+
         for (entry in entries) {
             val pos = ChunkUtils.getBlockPosition(entry.pos, chunkX, chunkZ)
             chunk.setBlock(pos, entry.block)
@@ -95,7 +95,8 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
 
     init {
         // Group all blocks together to be put into arrays
-        val allBlocks: Table<Long, Int, Block> = HashBasedTable.create()
+        //val allBlocks: Table<Long, Int, Block> = HashBasedTable.create()
+        val allBlocks = mutableMapOf<Long, MutableList<Pair<Int, Block>>>()
 
         // Group blocks together
         for (schematic in schematics) {
@@ -109,7 +110,7 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
                 val blockNamespace = blockSplit[0]
 
 
-                val properties = hashMapOf<String, String>()
+                val properties = mutableMapOf<String, String>()
                 if (blockSplit.size > 1) blockSplit[1].split(",").forEach {
                     val split = it.trim().split("=")
                     properties[split[0]] = split[1]
@@ -125,7 +126,9 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
                     ChunkUtils.getChunkCoordinate(block.z().toDouble())
                 )
                 val blockIndex = ChunkUtils.getBlockIndex(block.x(), block.y(), block.z())
-                allBlocks.put(chunkIndex, blockIndex, minestomBlock)
+                //allBlocks.put(chunkIndex, blockIndex, minestomBlock)
+                if (allBlocks[chunkIndex] == null) allBlocks[chunkIndex] = mutableListOf()
+                allBlocks[chunkIndex]!!.add(Pair(blockIndex, minestomBlock))
             }
 
             schematic.allEntities.forEach {
@@ -133,15 +136,11 @@ class SchematicChunkLoader(val instance: Instance, vararg schematics: SpongeSche
             }
         }
 
-        // Create block entries and the block entry arrays
-        for (chunkIndex in allBlocks.rowKeySet()) {
-            val chunkBlocks = allBlocks.row(chunkIndex)
-            val entries = chunkBlocks.entries
-                .map {
-                    BlockEntry(it.key, it.value)
-                }
-                .toTypedArray()
-            blocks[chunkIndex as Long] = entries
+        allBlocks.forEach {
+            val entries = it.value.map {
+                BlockEntry(it.first, it.second)
+            }.toTypedArray()
+            blocks[it.key] = entries
         }
 
 

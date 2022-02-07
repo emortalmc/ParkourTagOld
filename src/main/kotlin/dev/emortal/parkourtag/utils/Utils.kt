@@ -1,9 +1,5 @@
 package dev.emortal.parkourtag.utils
 
-import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-
-fun Component.toString(): String = PlainTextComponentSerializer.plainText().serialize(this);
 fun Int.parsed(): String {
     var string = "";
     val hours = this / 3600

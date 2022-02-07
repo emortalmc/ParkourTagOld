@@ -37,8 +37,8 @@ dependencies {
     // Use the Kotlin reflect library.
     compileOnly(kotlin("reflect"))
 
-    compileOnly("com.github.Minestom:Minestom:517d6a3b7c")
-    compileOnly("com.github.EmortalMC:Immortal:d4f53ae6ba")
+    compileOnly("com.github.Minestom:Minestom:2e02dfd4d8")
+    compileOnly("com.github.EmortalMC:Immortal:cd4c7dab0d")
     //implementation("com.github.emortaldev:Scaffolding:b4ca83efa7")
     implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 

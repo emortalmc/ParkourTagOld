@@ -42,6 +42,7 @@ import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
 import java.io.File
 import java.time.Duration
+import java.util.concurrent.ThreadLocalRandom
 import kotlin.math.pow
 
 
@@ -83,18 +84,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun playerLeave(player: Player) {
-        if (players.size == 1) {
-            if (gameState != GameState.PLAYING) return
-            if (goonsTeam.players.contains(players.first())) {
-                victory(ParkourTagTeam.GOONS)
-            } else {
-                victory(ParkourTagTeam.TAGGERS)
-            }
-        }
-        if (taggersTeam.players.isEmpty()) {
-            if (gameState != GameState.PLAYING) return
-            victory(ParkourTagTeam.GOONS)
-        }
     }
 
     override fun gameStarted() {
@@ -102,10 +91,11 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         scoreboard?.updateLineContent("infoLine", Component.text("Rolling...", NamedTextColor.GRAY))
 
         var picked = players.random()
+        val offset = ThreadLocalRandom.current().nextInt(players.size)
         (0..15).forEach {
             Manager.scheduler.buildTask {
                 picked.isGlowing = false
-                picked = players.random()
+                picked = players.elementAt((it + offset) % players.size)
                 picked.isGlowing = true
 
                 playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
@@ -238,7 +228,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         )
 
         if (goonsTeam.players.isEmpty()) {
-            victory(ParkourTagTeam.TAGGERS)
+            victory(taggersTeam)
         }
 
         player.gameMode = GameMode.SPECTATOR
@@ -339,7 +329,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         )
                     }
                     timeLeft == 0 -> {
-                        victory(ParkourTagTeam.GOONS)
+                        victory(goonsTeam)
                         return
                     }
                     timeLeft < 10 -> {
@@ -365,45 +355,12 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }.repeat(Duration.ofSeconds(1)).schedule()
     }
 
-    fun victory(winningTeam: ParkourTagTeam) {
-        gameState = GameState.ENDING
+    override fun gameWon(winningPlayers: Collection<Player>) {
         timerTask?.cancel()
 
         scoreboard?.removeLine("tagger")
         scoreboard?.removeLine("goons_left")
         scoreboard?.removeLine("time_left")
-
-        val victoryTitle = Title.title(
-            Component.text("VICTORY!", NamedTextColor.GOLD, TextDecoration.BOLD),
-            Component.text(EndGameQuotes.victory.random(), NamedTextColor.GRAY),
-            Title.Times.of(Duration.ZERO, Duration.ofSeconds(3), Duration.ofSeconds(3))
-        )
-        val defeatTitle = Title.title(
-            Component.text("DEFEAT!", NamedTextColor.RED, TextDecoration.BOLD),
-            Component.text(EndGameQuotes.defeat.random(), NamedTextColor.GRAY),
-            Title.Times.of(Duration.ZERO, Duration.ofSeconds(3), Duration.ofSeconds(3))
-        )
-
-        if (winningTeam == ParkourTagTeam.TAGGERS) {
-            players.forEach {
-                if (taggersTeam.players.contains(it)) {
-                    it.showTitle(victoryTitle)
-                } else {
-                    it.showTitle(defeatTitle)
-                }
-            }
-        } else {
-            players.forEach {
-                if (taggersTeam.players.contains(it)) {
-                    it.showTitle(defeatTitle)
-                } else {
-                    it.showTitle(victoryTitle)
-                }
-            }
-        }
-
-        Manager.scheduler.buildTask { destroy() }.delay(Duration.ofSeconds(5)).schedule()
-
     }
 
     override fun gameDestroyed() {
