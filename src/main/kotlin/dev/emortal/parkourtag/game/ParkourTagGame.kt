@@ -1,9 +1,13 @@
 package dev.emortal.parkourtag.game
 
 import dev.emortal.immortal.game.*
+import dev.emortal.immortal.game.EndGameQuotes.victory
+import dev.emortal.immortal.util.MinestomRunnable
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagExtension
 import dev.emortal.parkourtag.map.SchematicChunkLoader
+import dev.emortal.parkourtag.utils.WorldBorderUtil.hideWarning
+import dev.emortal.parkourtag.utils.WorldBorderUtil.showWarning
 import dev.emortal.parkourtag.utils.parsed
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
@@ -34,40 +38,42 @@ import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.adventure.sendMiniMessage
 import world.cepi.kstom.event.listenOnly
-import world.cepi.kstom.util.MinestomRunnable
 import world.cepi.kstom.util.playSound
 import world.cepi.particle.Particle
 import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
+import java.util.stream.Collectors
+import kotlin.io.path.nameWithoutExtension
 import kotlin.math.pow
-
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     private val goonsTeam =
         registerTeam(
             Team(
-                "goons",
+                "Goons",
                 NamedTextColor.WHITE,
                 nameTagVisibility = TeamsPacket.NameTagVisibility.HIDE_FOR_OTHER_TEAMS
             )
         )
     private val taggersTeam = registerTeam(
         Team(
-            "taggers",
+            "Taggers",
             NamedTextColor.RED,
             nameTagVisibility = TeamsPacket.NameTagVisibility.ALWAYS
         )
     )
 
-    lateinit var spawnPos: Pos
     lateinit var mapConfig: MapConfig
 
-    private var timerTask: Task? = null
-
+    lateinit var timerTask: MinestomRunnable
 
     private val taggerTitle = Title.title(
         Component.text("TAGGER", NamedTextColor.RED, TextDecoration.BOLD),
@@ -79,8 +85,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     )
 
     override fun playerJoin(player: Player) {
-        player.respawnPoint = spawnPos
-        player.teleport(spawnPos)
     }
 
     override fun playerLeave(player: Player) {
@@ -94,6 +98,8 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val offset = ThreadLocalRandom.current().nextInt(players.size)
         (0..15).forEach {
             Manager.scheduler.buildTask {
+                if (gameState == GameState.ENDING || players.size == 0) return@buildTask
+
                 picked.isGlowing = false
                 picked = players.elementAt((it + offset) % players.size)
                 picked.isGlowing = true
@@ -126,7 +132,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
                     scoreboard?.updateLineContent("infoLine", Component.empty())
 
-                    setupGame()
+                    Manager.scheduler.buildTask {
+                        setupGame()
+                    }.delay(Duration.ofSeconds(3)).schedule()
                 }
             }.delay(Duration.ofMillis((it * 4.0).pow(2.0).toLong())).schedule()
         }
@@ -142,23 +150,30 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             if (target.gameMode != GameMode.ADVENTURE || attacker.gameMode != GameMode.ADVENTURE) return@listenOnly
 
             if (taggersTeam.players.contains(attacker) && !taggersTeam.players.contains(target)) {
-                sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><white>${attacker.username}</white> tagged <red>${target.username}</red>")
-                attacker.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.AMBIENT, 1f, 1f))
-
-                showParticle(
-                    Particle.particle(
-                        type = ParticleType.LARGE_SMOKE,
-                        count = 15,
-                        data = OffsetAndSpeed(1f, 1f, 1f, 0.04f),
-                    ),
-                    target.position.asVec()
-                )
-
-                kill(target, null)
+                kill(target, attacker)
             }
         }
 
         listenOnly<PlayerTickEvent> {
+            /*if (goonsTeam.players.contains(player)) {
+                val distanceToTagger = taggersTeam.players.minOf { it.position.distanceSquared(player.position) }
+
+                if (distanceToTagger > 7*7) {
+                    player.hideWarning()
+                } else {
+                    player.showWarning()
+                }
+            }*/
+
+            if (taggersTeam.players.contains(player)) {
+                val smallestDistanceToGoon = goonsTeam.players.minOfOrNull { goon -> player.position.distanceSquared(goon.position) }
+                    ?: return@listenOnly
+
+                if (player.aliveTicks % (sqrt(smallestDistanceToGoon) / 2).roundToInt().coerceAtLeast(2) == 0L)
+
+                goonsTeam.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_BASEDRUM, Sound.Source.MASTER, 1.5f, 1f), player.position)
+            }
+
 
             if (player.gameMode == GameMode.ADVENTURE) {
                 if (player.instance!!.getBlock(player.position).compare(Block.RAIL) &&
@@ -177,8 +192,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     kill(player, null)
                 }
             }
-
-
         }
 
         listenOnly<PlayerStartFlyingEvent> {
@@ -197,7 +210,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 player.position
             )
 
-            object : MinestomRunnable() {
+            object : MinestomRunnable(timer = timer, repeat = Duration.ofSeconds(1)) {
                 var i = 3
 
                 override fun run() {
@@ -214,7 +227,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${i + 1}s".asMini())
 
                 }
-            }.repeat(Duration.ofSeconds(1)).schedule()
+            }
 
         }
     }
@@ -223,13 +236,25 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         goonsTeam.remove(player)
 
         scoreboard!!.updateLineContent(
-            "goons_left", Component.text("Goons: ", NamedTextColor.GREEN)
+            "goons_left", Component.text("Goons: ", NamedTextColor.GRAY)
                 .append(Component.text(goonsTeam.players.size, NamedTextColor.RED))
         )
 
         if (goonsTeam.players.isEmpty()) {
             victory(taggersTeam)
         }
+
+        sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><white>${(killer as? Player)?.username}</white> tagged <red>${player.username}</red>")
+        playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.AMBIENT, 1f, 1f))
+
+        showParticle(
+            Particle.particle(
+                type = ParticleType.LARGE_SMOKE,
+                count = 15,
+                data = OffsetAndSpeed(0.25f, 0.25f, 0.25f, 0.05f),
+            ),
+            player.position.asVec()
+        )
 
         player.gameMode = GameMode.SPECTATOR
         player.isInvisible = true
@@ -241,63 +266,57 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     private fun setupGame() {
+        goonsTeam.players.addAll(players.filter { !taggersTeam.players.contains(it) })
 
-        object : MinestomRunnable() {
-            override fun run() {
-                goonsTeam.players.addAll(players.filter { !taggersTeam.players.contains(it) })
+        goonsTeam.players.forEach {
+            it.showTitle(goonTitle)
+            it.teleport(mapConfig.goonSpawnPosition)
+        }
 
-                goonsTeam.players.forEach {
-                    it.showTitle(goonTitle)
-                    it.teleport(mapConfig.goonSpawnPosition)
-                }
+        taggersTeam.players.forEach {
+            it.showTitle(taggerTitle)
+            it.teleport(mapConfig.taggerSpawnPosition)
+            it.isGlowing = true
+        }
 
-                taggersTeam.players.forEach {
-                    it.showTitle(taggerTitle)
-                    it.teleport(mapConfig.taggerSpawnPosition)
-                    it.isGlowing = true
-                }
+        scoreboard?.createLine(
+            Sidebar.ScoreboardLine(
+                "time_left",
+                Component.empty(),
+                4
+            )
+        )
+        scoreboard?.createLine(
+            Sidebar.ScoreboardLine(
+                "goons_left",
+                Component.text()
+                    .append(Component.text("Goons: ", NamedTextColor.GRAY))
+                    .append(Component.text(goonsTeam.players.size, NamedTextColor.RED))
+                    .build(),
+                2
+            )
+        )
 
-                scoreboard?.createLine(
-                    Sidebar.ScoreboardLine(
-                        "time_left",
-                        Component.empty(),
-                        4
-                    )
-                )
-                scoreboard?.createLine(
-                    Sidebar.ScoreboardLine(
-                        "goons_left",
-                        Component.text()
-                            .append(Component.text("Goons: ", NamedTextColor.GRAY))
-                            .append(Component.text(goonsTeam.players.size, NamedTextColor.RED))
-                            .build(),
-                        2
-                    )
-                )
+        scoreboard?.createLine(
+            Sidebar.ScoreboardLine(
+                "tagger",
+                Component.text()
+                    .append(Component.text("Taggers: ", NamedTextColor.GRAY))
+                    .append(Component.text(taggersTeam.players.joinToString { it.username }, NamedTextColor.GOLD))
+                    .build(),
+                0
+            )
+        )
 
-                scoreboard?.createLine(
-                    Sidebar.ScoreboardLine(
-                        "tagger",
-                        Component.text()
-                            .append(Component.text("Taggers: ", NamedTextColor.GRAY))
-                            .append(Component.text(taggersTeam.players.joinToString { it.username }, NamedTextColor.GOLD))
-                            .build(),
-                        0
-                    )
-                )
+        Manager.scheduler.buildTask { registerEvents() }
+            .delay(Duration.ofSeconds(2))
+            .schedule()
 
-                Manager.scheduler.buildTask { registerEvents() }
-                    .delay(Duration.ofSeconds(2))
-                    .schedule()
-
-                startTimer()
-            }
-        }.delay(Duration.ofSeconds(3)).schedule()
-
+        startTimer()
     }
 
     fun startTimer() {
-        timerTask = object : MinestomRunnable() {
+        timerTask = object : MinestomRunnable(timer = timer, repeat = Duration.ofSeconds(1)) {
             var timeLeft = 90
 
             override fun run() {
@@ -346,28 +365,27 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 scoreboard!!.updateLineContent(
                     "time_left",
                     Component.text()
-                        .append(Component.text("Time left: ", NamedTextColor.YELLOW))
-                        .append(Component.text(timeLeft.parsed(), NamedTextColor.GOLD))
+                        .append(Component.text("Time left: ", NamedTextColor.GREEN))
+                        .append(Component.text(timeLeft.parsed(), NamedTextColor.GREEN))
                         .build()
                 )
                 timeLeft--
             }
-        }.repeat(Duration.ofSeconds(1)).schedule()
+        }
     }
 
     override fun gameWon(winningPlayers: Collection<Player>) {
-        timerTask?.cancel()
-
-        scoreboard?.removeLine("tagger")
-        scoreboard?.removeLine("goons_left")
-        scoreboard?.removeLine("time_left")
+        timerTask.cancel()
     }
 
     override fun gameDestroyed() {
     }
 
     override fun instanceCreate(): Instance {
-        val randomMap = File("./maps/parkourtag/").listFiles().random()
+        val randomMap = File("./maps/parkourtag/" + Files.list(Path.of("./maps/parkourtag/"))
+            .map { it.nameWithoutExtension }
+            .collect(Collectors.toSet())
+            .random() + ".schem")
 
         val schematic = Schematics.file(randomMap, Schemas.SPONGE)
         val data = Blocky.builder().compression(true).build().read(schematic)
@@ -375,9 +393,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val instance = Manager.instance.createInstanceContainer(
             Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
         )
-        val schematicChunkLoader = SchematicChunkLoader(instance, data)
+        val schematicChunkLoader = SchematicChunkLoader(data)
         instance.chunkLoader = schematicChunkLoader
-        spawnPos = Pos(data.width / 2.0, 10.0, data.length / 2.0)
+
+        spawnPosition = Pos(data.width / 2.0, 10.0, data.length / 2.0)
 
         mapConfig = ParkourTagExtension.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
 

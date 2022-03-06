@@ -1,7 +1,7 @@
 package dev.emortal.parkourtag.utils
 
 fun Int.parsed(): String {
-    var string = "";
+    var string = ""
     val hours = this / 3600
     val minutes = (this % 3600) / 60
     val seconds = this % 60
