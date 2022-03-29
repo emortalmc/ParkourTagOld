@@ -3,6 +3,6 @@
   "name": "ParkourTag",
   "version": "${project.version}",
   "dependencies": [
-    "KStom", "Immortal"
+    "Immortal"
   ]
 }

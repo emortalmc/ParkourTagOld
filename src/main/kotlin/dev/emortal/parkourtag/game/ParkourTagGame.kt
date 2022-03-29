@@ -1,13 +1,11 @@
 package dev.emortal.parkourtag.game
 
+import dev.emortal.immortal.config.GameOptions
 import dev.emortal.immortal.game.*
-import dev.emortal.immortal.game.EndGameQuotes.victory
 import dev.emortal.immortal.util.MinestomRunnable
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagExtension
 import dev.emortal.parkourtag.map.SchematicChunkLoader
-import dev.emortal.parkourtag.utils.WorldBorderUtil.hideWarning
-import dev.emortal.parkourtag.utils.WorldBorderUtil.showWarning
 import dev.emortal.parkourtag.utils.parsed
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
@@ -29,7 +27,6 @@ import net.minestom.server.potion.Potion
 import net.minestom.server.potion.PotionEffect
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
-import net.minestom.server.timer.Task
 import net.minestom.server.utils.NamespaceID
 import org.krystilize.blocky.Blocky
 import org.krystilize.blocky.Schematics
@@ -44,6 +41,7 @@ import world.cepi.particle.ParticleType
 import world.cepi.particle.data.OffsetAndSpeed
 import world.cepi.particle.showParticle
 import java.io.File
+import java.io.FileInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -210,10 +208,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 player.position
             )
 
-            object : MinestomRunnable(timer = timer, repeat = Duration.ofSeconds(1)) {
+            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(1)) {
                 var i = 3
 
-                override fun run() {
+                override suspend fun run() {
                     i--
 
                     if (i < 0) {
@@ -316,10 +314,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     fun startTimer() {
-        timerTask = object : MinestomRunnable(timer = timer, repeat = Duration.ofSeconds(1)) {
+        timerTask = object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(1)) {
             var timeLeft = 90
 
-            override fun run() {
+            override suspend fun run() {
                 when {
                     timeLeft == 10 -> {
                         taggersTeam.players.forEach {
@@ -402,5 +400,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         return instance
     }
+
 
 }

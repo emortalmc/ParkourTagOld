@@ -1,19 +1,17 @@
 package dev.emortal.parkourtag.utils
 
 import net.minestom.server.instance.batch.ChunkBatch
-import org.krystilize.blocky.sponge.SpongeSchematicData
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
-import org.krystilize.blocky.sponge.SpongeSchematicData.SpongeBlock
 import net.minestom.server.utils.chunk.ChunkUtils
 import it.unimi.dsi.fastutil.longs.Long2ObjectFunction
 import net.minestom.server.instance.block.Block
 import org.krystilize.blocky.Blocky
-import org.krystilize.blocky.Schematic
 import org.krystilize.blocky.Schematics
 import org.krystilize.blocky.data.Schemas
+import org.krystilize.blocky.sponge.SpongeSchematicData
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
