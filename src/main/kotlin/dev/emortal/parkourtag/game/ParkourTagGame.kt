@@ -164,12 +164,13 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }*/
 
             if (taggersTeam.players.contains(player)) {
-                val smallestDistanceToGoon = goonsTeam.players.minOfOrNull { goon -> player.position.distanceSquared(goon.position) }
-                    ?: return@listenOnly
+                goonsTeam.players.forEach { goon ->
+                    val distance = goon.position.distanceSquared(player.position)
+                    if (distance > 25*25) return@forEach
 
-                if (player.aliveTicks % (sqrt(smallestDistanceToGoon) / 2).roundToInt().coerceAtLeast(2) == 0L)
-
-                goonsTeam.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_BASEDRUM, Sound.Source.MASTER, 1.5f, 1f), player.position)
+                    if (player.aliveTicks % (sqrt(distance) / 2).roundToInt().coerceAtLeast(2) == 0L)
+                        goon.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_BASEDRUM, Sound.Source.MASTER, 1.5f, 1f), player.position)
+                }
             }
 
 
