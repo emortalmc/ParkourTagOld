@@ -36,8 +36,8 @@ class ParkourTagExtension : Extension() {
         config = ConfigHelper.initConfigFile(Path.of("./parkour.json"), parkourConfig)
 
         GameManager.registerGame<ParkourTagGame>(
-            "parkourtag",
-            Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
+            "hideandseek",
+            Component.text("Hide and Seek", NamedTextColor.GREEN, TextDecoration.BOLD),
             true,
             true,
             WhenToRegisterEvents.NEVER,
