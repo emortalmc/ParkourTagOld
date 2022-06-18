@@ -25,7 +25,7 @@ dependencies {
     implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.1")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
 
 }
 
