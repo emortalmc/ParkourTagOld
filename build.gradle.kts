@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.6.20"
-    kotlin("plugin.serialization") version "1.6.20"
+    id("org.jetbrains.kotlin.jvm") version "1.7.10"
+    kotlin("plugin.serialization") version "1.7.10"
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
     java
@@ -12,20 +12,19 @@ repositories {
     mavenCentral()
 
     maven(url = "https://jitpack.io")
-    maven(url = "https://repo.spongepowered.org/maven")
-    //maven(url = "https://repo.crystalgames.net/snapshots/")
+    maven(url = "https://repo.crystalgames.net/snapshots/")
 }
 
 dependencies {
     //compileOnly(kotlin("stdlib"))
 
-    compileOnly("com.github.Minestom:Minestom:64de8f87c0")
+    compileOnly("com.github.Minestom:Minestom:0989c220f6")
     compileOnly("com.github.EmortalMC:Immortal:e9c693da83")
-    //implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
-    implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
+    implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
+    //implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.1")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
 
 }
 

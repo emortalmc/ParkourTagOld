@@ -1,12 +1,15 @@
 package dev.emortal.parkourtag.game
 
 import dev.emortal.immortal.config.GameOptions
-import dev.emortal.immortal.game.*
+import dev.emortal.immortal.game.GameState
+import dev.emortal.immortal.game.PvpGame
+import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagExtension
-import dev.emortal.parkourtag.map.SchematicChunkLoader
 import dev.emortal.parkourtag.utils.showFirework
+import net.crystalgames.scaffolding.instance.SchematicChunkLoader
+import net.crystalgames.scaffolding.schematic.impl.SpongeSchematic
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -19,10 +22,8 @@ import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
-import net.minestom.server.entity.metadata.other.ArmorStandMeta
 import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.player.PlayerStartFlyingEvent
-import net.minestom.server.event.player.PlayerStartSneakingEvent
 import net.minestom.server.event.player.PlayerTickEvent
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.block.Block
@@ -34,21 +35,18 @@ import net.minestom.server.potion.PotionEffect
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.utils.NamespaceID
-import org.krystilize.blocky.Blocky
-import org.krystilize.blocky.Schematics
-import org.krystilize.blocky.data.Schemas
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
 import world.cepi.kstom.adventure.sendMiniMessage
 import world.cepi.kstom.event.listenOnly
 import world.cepi.kstom.util.playSound
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
 import java.util.stream.Collectors
+import kotlin.io.path.inputStream
 import kotlin.io.path.nameWithoutExtension
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -70,6 +68,8 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             nameTagVisibility = TeamsPacket.NameTagVisibility.NEVER
         )
     )
+
+    override var spawnPosition = Pos(0.5, 10.0, 0.5)
 
     lateinit var mapConfig: MapConfig
 
@@ -361,10 +361,11 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     fun startTimer() {
-        timerTask = object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(1)) {
-            var timeLeft = 90
-
+        timerTask = object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(1), delay = Duration.ofSeconds(1), iterations = 90) {
             override suspend fun run() {
+                val currentIter = currentIteration.get()
+                val timeLeft = iterations - currentIter
+
                 when {
                     timeLeft == 10 -> {
                         taggersTeam.players.forEach {
@@ -393,7 +394,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         )
                     }
                     timeLeft == 0 -> {
-                        Logger.warn("Ran out of time")
+                        Logger.warn("Ran out of time - iter: ${currentIteration.get()}")
                         victory(goonsTeam)
                         return
                     }
@@ -407,12 +408,12 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
+                    else -> {}
                 }
                 scoreboard!!.updateLineContent(
                     "time_left",
                     Component.text("Time left: ${timeLeft.parsed()}", NamedTextColor.GREEN)
                 )
-                timeLeft--
             }
         }
     }
@@ -450,21 +451,25 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun instanceCreate(): Instance {
-        val randomMap = File("./maps/parkourtag/" + Files.list(Path.of("./maps/parkourtag/"))
+        val randomMap = Path.of("./maps/parkourtag/" + Files.list(Path.of("./maps/parkourtag/"))
             .map { it.nameWithoutExtension }
             .collect(Collectors.toSet())
             .random() + ".schem")
 
-        val schematic = Schematics.file(randomMap, Schemas.SPONGE)
-        val data = Blocky.builder().compression(true).build().read(schematic)
+        val schematic = SpongeSchematic()
+        schematic.read(randomMap.inputStream())
+
+//        val schematic = Schematics.file(randomMap, Schemas.SPONGE)
+//        val data = Blocky.builder().compression(true).build().read(schematic)
 
         val instance = Manager.instance.createInstanceContainer(
             Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
         )
-        val schematicChunkLoader = SchematicChunkLoader(data)
-        instance.chunkLoader = schematicChunkLoader
+        instance.chunkLoader = SchematicChunkLoader.builder()
+            .addSchematic(schematic)
+            .build()
 
-        spawnPosition = Pos(data.width / 2.0, 10.0, data.length / 2.0)
+        //spawnPosition = Pos(schematic.width / 2.0, 10.0, schematic.length / 2.0)
 
         mapConfig = ParkourTagExtension.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
 
