@@ -34,7 +34,9 @@ import net.minestom.server.potion.Potion
 import net.minestom.server.potion.PotionEffect
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.NamespaceID
+import net.minestom.server.utils.time.TimeUnit
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
@@ -69,11 +71,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         )
     )
 
-    override var spawnPosition = Pos(0.5, 10.0, 0.5)
+    override var spawnPosition = Pos(0.5, 0.0, 0.5)
 
     lateinit var mapConfig: MapConfig
-
-    var timerTask: MinestomRunnable? = null
 
     private val taggerTitle = Title.title(
         Component.text("SEEKER", NamedTextColor.RED, TextDecoration.BOLD),
@@ -94,21 +94,20 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         scoreboard?.updateLineContent("infoLine", Component.text("Rolling...", NamedTextColor.GRAY))
 
-        object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofMillis(1), iterations = 17) {
+        object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.nextTick(), iterations = 17L) {
             var picked = players.random()
             val offset = ThreadLocalRandom.current().nextInt(players.size)
 
-            override suspend fun run() {
+            override fun run() {
                 if (gameState == GameState.ENDING || players.size == 0) {
                     cancel()
                     return
                 }
 
-                val currentIter = currentIteration.get()
-                repeat = Duration.ofMillis(currentIter * 30L)
+                delaySchedule = TaskSchedule.duration((currentIteration / 1.2).toLong().coerceAtLeast(1L), TimeUnit.SERVER_TICK)
 
                 picked.isGlowing = false
-                picked = players.elementAt((currentIter + offset) % players.size)
+                picked = players.elementAt(((currentIteration + offset) % players.size).toInt())
                 picked.isGlowing = true
 
                 playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
@@ -124,11 +123,11 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
 
             override fun cancelled() {
-                object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofMillis(100), iterations = 10*3) {
-                    override suspend fun run() {
+                object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.tick(2), iterations = 10L*3L) {
+                    override fun run() {
                         showTitle(
                             Title.title(
-                                "<rainbow:${currentIteration.get()}>${picked.username}".asMini(),
+                                "<rainbow:${currentIteration}>${picked.username}".asMini(),
                                 Component.text("is the seeker", NamedTextColor.GRAY),
                                 Title.Times.times(
                                     Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(500)
@@ -197,11 +196,11 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     player.addEffect(Potion(PotionEffect.LEVITATION, 15, 4))
                 }
 
-                if (player.position.y < -5) {
+                if (player.position.y < -7) {
                     sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> discovered the void")
                     kill(player, null)
                 }
-                if (player.position.y > 30) {
+                if (player.position.y > 20) {
                     sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> fell into the sky")
                     kill(player, null)
                 }
@@ -224,9 +223,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 player.position
             )
 
-            object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(1), iterations = 4) {
-                override suspend fun run() {
-                    player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${iterations - currentIteration.get()}s".asMini())
+            object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(1), iterations = 4) {
+                override fun run() {
+                    player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${iterations - currentIteration}s".asMini())
                 }
 
                 override fun cancelled() {
@@ -292,9 +291,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             goonsTeam.add(it)
         }
 
+        val rand = ThreadLocalRandom.current()
         goonsTeam.players.forEach {
             it.showTitle(goonTitle)
-            it.teleport(mapConfig.goonSpawnPosition)
+            it.teleport(mapConfig.goonSpawnPosition.add(rand.nextDouble(-2.0, 2.0), 0.0, rand.nextDouble(-2.0, 2.0)))
             it.addEffect(Potion(PotionEffect.INVISIBILITY, 1, 7*20))
         }
 
@@ -317,6 +317,14 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 4
             )
         )
+        scoreboard?.createLine(
+            Sidebar.ScoreboardLine(
+                "time_left2",
+                Component.empty(),
+                3
+            )
+        )
+
         scoreboard?.createLine(
             Sidebar.ScoreboardLine(
                 "goons_left",
@@ -354,33 +362,67 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 it.clearEffects()
                 it.showTitle(title)
                 it.playSound(sound, Emitter.self())
+                it.askSynchronization() // Seeker is sometimes out of sync once dismounting
             }
         }.delay(Duration.ofSeconds(7)).schedule()
 
         startTimer()
     }
 
-    fun startTimer() {
-        timerTask = object : MinestomRunnable(coroutineScope = coroutineScope, repeat = Duration.ofSeconds(1), delay = Duration.ofSeconds(1), iterations = 90) {
-            override suspend fun run() {
-                val currentIter = currentIteration.get()
-                val timeLeft = iterations - currentIter
+    private fun startTimer() {
+        val playerCount = players.size
+        val glowingTime = 15L + ((playerCount * 15L) / 8L) // 30 seconds with 8 players, 18 with 2
+        val doubleJumpTime = glowingTime / 2L // 15 seconds with 8 players, 9 with 2
+        val playTime = 240L / (12L - playerCount) // 60 seconds with 8 players, 24 with 2
+
+        object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(1), delay = Duration.ofSeconds(1), iterations = 90L) {
+            override fun run() {
+                val currentIter = currentIteration
+                val timeLeft = (iterations - currentIteration) - 1
+
+                if (timeLeft < glowingTime) {
+                    scoreboard?.updateLineContent(
+                        "time_left2",
+                        Component.text()
+                            .append(Component.text("Double jump in ", NamedTextColor.GRAY))
+                            .append(Component.text((timeLeft - doubleJumpTime).parsed()))
+                            .build()
+                    )
+                } else {
+                    scoreboard?.updateLineContent(
+                        "time_left2",
+                        Component.text()
+                            .append(Component.text("Glowing in ", NamedTextColor.GRAY))
+                            .append(Component.text((timeLeft - glowingTime).parsed()))
+                            .build()
+                    )
+                }
 
                 when {
-                    timeLeft == 10 -> {
+                    timeLeft == doubleJumpTime -> {
                         taggersTeam.players.forEach {
                             it.isAllowFlying = true
-                            playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
-                            showTitle(
-                                Title.title(
-                                    Component.empty(),
-                                    Component.text("Double jump has been enabled!", NamedTextColor.GRAY),
-                                    Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                                )
-                            )
                         }
+                        playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
+                        showTitle(
+                            Title.title(
+                                Component.empty(),
+                                Component.text("Double jump has been enabled!", NamedTextColor.GRAY),
+                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                            )
+                        )
                     }
-                    timeLeft == 30 -> {
+                    timeLeft == (doubleJumpTime + 10L) || timeLeft <= (doubleJumpTime + 5) -> {
+                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
+                        showTitle(
+                            Title.title(
+                                Component.empty(),
+                                Component.text("Double jump will be enabled in ${timeLeft - doubleJumpTime} seconds!", NamedTextColor.GRAY),
+                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                            )
+                        )
+                    }
+                    timeLeft == glowingTime -> {
                         goonsTeam.players.forEach {
                             it.isGlowing = true
                         }
@@ -393,12 +435,22 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == 0 -> {
-                        Logger.warn("Ran out of time - iter: ${currentIteration.get()}")
+                    timeLeft == (glowingTime + 10L) || timeLeft <= (glowingTime + 5) -> {
+                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
+                        showTitle(
+                            Title.title(
+                                Component.empty(),
+                                Component.text("Hiders will glow in ${timeLeft - glowingTime} seconds!", NamedTextColor.GRAY),
+                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                            )
+                        )
+                    }
+                    timeLeft == 0L -> {
+                        //Logger.warn("Ran out of time - iter: ${currentIteration}")`
                         victory(goonsTeam)
                         return
                     }
-                    timeLeft < 10 -> {
+                    timeLeft < 10L -> {
                         playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.AMBIENT, 1f, 1f))
                         showTitle(
                             Title.title(
@@ -419,7 +471,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun gameWon(winningPlayers: Collection<Player>) {
-        timerTask?.cancel()
+        taskGroup.cancel()
 
         val seekersWon = goonsTeam.players.isEmpty()
 

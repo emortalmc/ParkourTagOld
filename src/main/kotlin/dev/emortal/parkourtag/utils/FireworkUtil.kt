@@ -1,7 +1,6 @@
 package dev.emortal.parkourtag.utils
 
 import dev.emortal.immortal.util.MinestomRunnable
-import kotlinx.coroutines.GlobalScope
 import net.kyori.adventure.sound.Sound
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.coordinate.Vec
@@ -16,9 +15,9 @@ import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.metadata.FireworkMeta
 import net.minestom.server.network.packet.server.play.EntityStatusPacket
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.PacketUtils.sendGroupedPacket
 import world.cepi.kstom.util.playSound
-import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
 
 fun Player.showFirework(instance: Instance, position: Pos, effects: MutableList<FireworkEffect>) = listOf(this).showFirework(instance, position, effects)
@@ -68,9 +67,9 @@ fun Collection<Player>.showFireworkWithDuration(
 
     firework.setInstance(instance, position)
 
-    object : MinestomRunnable(repeat = Duration.ofMillis(50), iterations = ticks, coroutineScope = GlobalScope) {
+    object : MinestomRunnable(repeat = TaskSchedule.nextTick(), iterations = ticks.toLong()) {
 
-        override suspend fun run() {
+        override fun run() {
             // acceleration
             firework.velocity = firework.velocity.apply { x, y, z -> Vec(x * 1.15, y + 0.8, z * 1.15) }
         }

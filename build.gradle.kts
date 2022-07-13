@@ -19,7 +19,7 @@ dependencies {
     //compileOnly(kotlin("stdlib"))
 
     compileOnly("com.github.Minestom:Minestom:0989c220f6")
-    compileOnly("com.github.EmortalMC:Immortal:e9c693da83")
+    compileOnly("com.github.EmortalMC:Immortal:5be023dfae")
     implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
     //implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 
