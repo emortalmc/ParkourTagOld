@@ -199,7 +199,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     if (player.hasTag(launchCooldownTag)) return@listenOnly
 
                     player.playSound(Sound.sound(SoundEvent.ENTITY_BAT_TAKEOFF, Sound.Source.MASTER, 0.5f, 0.8f))
-                    player.velocity = Vec(0.0, 21.0, 0.0)
+                    player.velocity = Vec(0.0, 22.5, 0.0)
                     player.setTag(launchCooldownTag, true)
                     player.scheduler().buildTask { player.removeTag(launchCooldownTag) }.delay(Duration.ofMillis(1200)).schedule()
                 }
@@ -318,18 +318,19 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             it.isGlowing = true
         }
 
+        scoreboard?.updateLineScore("infoLine", 3)
         scoreboard?.createLine(
             Sidebar.ScoreboardLine(
                 "time_left",
                 Component.empty(),
-                4
+                5
             )
         )
         scoreboard?.createLine(
             Sidebar.ScoreboardLine(
                 "time_left2",
                 Component.empty(),
-                3
+                4
             )
         )
 
