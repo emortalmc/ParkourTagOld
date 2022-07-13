@@ -193,6 +193,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     player.instance!!.getBlock(player.position.add(0.0, 1.0, 0.0))
                         .compare(Block.STRUCTURE_VOID)
                 ) {
+                    if (player.activeEffects.none { it.potion.effect == PotionEffect.LEVITATION }) {
+                        player.playSound(Sound.sound(SoundEvent.ENTITY_BAT_TAKEOFF, Sound.Source.MASTER, 0.3f, 0.8f))
+                    }
                     player.addEffect(Potion(PotionEffect.LEVITATION, 15, 4))
                 }
 
