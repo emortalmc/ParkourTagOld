@@ -18,6 +18,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.title.Title
 import net.minestom.server.color.Color
 import net.minestom.server.coordinate.Pos
+import net.minestom.server.coordinate.Vec
 import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
@@ -34,6 +35,7 @@ import net.minestom.server.potion.Potion
 import net.minestom.server.potion.PotionEffect
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
+import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
 import net.minestom.server.utils.NamespaceID
 import net.minestom.server.utils.time.TimeUnit
@@ -176,6 +178,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
         }
 
+        val launchCooldownTag = Tag.Boolean("launchCooldown")
         listenOnly<PlayerTickEvent> {
             if (taggersTeam.players.contains(player)) {
                 goonsTeam.players.forEach { goon ->
@@ -193,10 +196,12 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     player.instance!!.getBlock(player.position.add(0.0, 1.0, 0.0))
                         .compare(Block.STRUCTURE_VOID)
                 ) {
-                    if (player.activeEffects.none { it.potion.effect == PotionEffect.LEVITATION }) {
-                        player.playSound(Sound.sound(SoundEvent.ENTITY_BAT_TAKEOFF, Sound.Source.MASTER, 0.3f, 0.8f))
-                    }
-                    player.addEffect(Potion(PotionEffect.LEVITATION, 15, 4))
+                    if (player.hasTag(launchCooldownTag)) return@listenOnly
+
+                    player.playSound(Sound.sound(SoundEvent.ENTITY_BAT_TAKEOFF, Sound.Source.MASTER, 0.5f, 0.8f))
+                    player.velocity = Vec(0.0, 21.0, 0.0)
+                    player.setTag(launchCooldownTag, true)
+                    player.scheduler().buildTask { player.removeTag(launchCooldownTag) }.delay(Duration.ofMillis(1200)).schedule()
                 }
 
                 if (player.position.y < -7) {
@@ -226,7 +231,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 player.position
             )
 
-            object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(1), iterations = 4) {
+            object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(1), iterations = 3) {
                 override fun run() {
                     player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${iterations - currentIteration}s".asMini())
                 }
@@ -378,26 +383,20 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val doubleJumpTime = glowingTime / 2L // 15 seconds with 8 players, 9 with 2
         val playTime = 240L / (12L - playerCount) // 60 seconds with 8 players, 24 with 2
 
-        object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(1), delay = Duration.ofSeconds(1), iterations = 90L) {
+        object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.duration(1, TimeUnit.SECOND), delay = TaskSchedule.nextTick(), iterations = 90L) {
             override fun run() {
                 val currentIter = currentIteration
                 val timeLeft = (iterations - currentIteration) - 1
 
-                if (timeLeft < glowingTime) {
+                if (timeLeft > glowingTime) {
                     scoreboard?.updateLineContent(
                         "time_left2",
-                        Component.text()
-                            .append(Component.text("Double jump in ", NamedTextColor.GRAY))
-                            .append(Component.text((timeLeft - doubleJumpTime).parsed()))
-                            .build()
+                        Component.text("Glowing: ${(timeLeft - glowingTime).parsed()}", NamedTextColor.GREEN)
                     )
-                } else {
+                } else if (timeLeft > doubleJumpTime) {
                     scoreboard?.updateLineContent(
                         "time_left2",
-                        Component.text()
-                            .append(Component.text("Glowing in ", NamedTextColor.GRAY))
-                            .append(Component.text((timeLeft - glowingTime).parsed()))
-                            .build()
+                        Component.text("Double jump: ${(timeLeft - doubleJumpTime).parsed()}", NamedTextColor.GREEN)
                     )
                 }
 
@@ -406,6 +405,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         taggersTeam.players.forEach {
                             it.isAllowFlying = true
                         }
+
+                        scoreboard?.removeLine("time_left2")
+
                         playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
                         showTitle(
                             Title.title(
@@ -415,7 +417,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == (doubleJumpTime + 10L) || timeLeft <= (doubleJumpTime + 5) -> {
+                    timeLeft == (doubleJumpTime + 10L) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
                         playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
                         showTitle(
                             Title.title(
@@ -438,7 +440,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == (glowingTime + 10L) || timeLeft <= (glowingTime + 5) -> {
+                    timeLeft == (glowingTime + 10L) || (timeLeft <= (glowingTime + 5) && timeLeft > glowingTime) -> {
                         playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
                         showTitle(
                             Title.title(
