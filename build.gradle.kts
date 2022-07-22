@@ -20,9 +20,10 @@ dependencies {
 
     compileOnly("com.github.Minestom:Minestom:0989c220f6")
     compileOnly("com.github.EmortalMC:Immortal:5be023dfae")
-    implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
+    //implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
     //implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 
+    implementation("com.github.EmortalMC:TNT:34bae5bb0c")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
 

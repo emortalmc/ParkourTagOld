@@ -8,12 +8,12 @@ import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagExtension
 import dev.emortal.parkourtag.utils.showFirework
-import net.crystalgames.scaffolding.instance.SchematicChunkLoader
-import net.crystalgames.scaffolding.schematic.impl.SpongeSchematic
+import dev.emortal.tnt.TNTLoader
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.title.Title
 import net.minestom.server.color.Color
@@ -37,7 +37,6 @@ import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
-import net.minestom.server.utils.NamespaceID
 import net.minestom.server.utils.time.TimeUnit
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
@@ -50,7 +49,6 @@ import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
 import java.util.stream.Collectors
-import kotlin.io.path.inputStream
 import kotlin.io.path.nameWithoutExtension
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -73,7 +71,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         )
     )
 
-    override var spawnPosition = Pos(0.5, 0.0, 0.5)
+    override var spawnPosition = Pos(0.5, 65.0, 0.5)
 
     lateinit var mapConfig: MapConfig
 
@@ -203,15 +201,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     player.setTag(launchCooldownTag, true)
                     player.scheduler().buildTask { player.removeTag(launchCooldownTag) }.delay(Duration.ofMillis(1200)).schedule()
                 }
-
-                if (player.position.y < -7) {
-                    sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> discovered the void")
-                    kill(player, null)
-                }
-                if (player.position.y > 20) {
-                    sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><red>${player.username}</red> fell into the sky")
-                    kill(player, null)
-                }
             }
         }
 
@@ -309,12 +298,17 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val holdingEntity = Entity(EntityType.ARMOR_STAND)
         holdingEntity.setNoGravity(true)
         holdingEntity.isInvisible = true
-        holdingEntity.setInstance(instance, mapConfig.taggerSpawnPosition)
+
+        holdingEntity.setInstance(instance, mapConfig.taggerSpawnPosition).thenRun {
+            taggersTeam.players.forEach {
+                holdingEntity.addPassenger(it)
+            }
+        }
 
         taggersTeam.players.forEach {
             it.showTitle(taggerTitle)
             it.addEffect(Potion(PotionEffect.BLINDNESS, 1, 8*20))
-            holdingEntity.addPassenger(it)
+            it.teleport(mapConfig.taggerSpawnPosition)
             it.isGlowing = true
         }
 
@@ -392,12 +386,18 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 if (timeLeft > glowingTime) {
                     scoreboard?.updateLineContent(
                         "time_left2",
-                        Component.text("Glowing: ${(timeLeft - glowingTime).parsed()}", NamedTextColor.GREEN)
+                        Component.text()
+                            .append(Component.text("Glowing: ", TextColor.color(59, 128, 59)))
+                            .append(Component.text((timeLeft - glowingTime).parsed(), NamedTextColor.GREEN))
+                            .build()
                     )
                 } else if (timeLeft > doubleJumpTime) {
                     scoreboard?.updateLineContent(
                         "time_left2",
-                        Component.text("Double jump: ${(timeLeft - doubleJumpTime).parsed()}", NamedTextColor.GREEN)
+                        Component.text()
+                            .append(Component.text("Double jump: ", TextColor.color(59, 128, 59)))
+                            .append(Component.text((timeLeft - doubleJumpTime).parsed(), NamedTextColor.GREEN))
+                            .build()
                     )
                 }
 
@@ -418,16 +418,6 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == (doubleJumpTime + 10L) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
-                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
-                        showTitle(
-                            Title.title(
-                                Component.empty(),
-                                Component.text("Double jump will be enabled in ${timeLeft - doubleJumpTime} seconds!", NamedTextColor.GRAY),
-                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                            )
-                        )
-                    }
                     timeLeft == glowingTime -> {
                         goonsTeam.players.forEach {
                             it.isGlowing = true
@@ -437,6 +427,16 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             Title.title(
                                 Component.empty(),
                                 Component.text("Hiders are now glowing!", NamedTextColor.GRAY),
+                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                            )
+                        )
+                    }
+                    timeLeft == (doubleJumpTime + 10L) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
+                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
+                        showTitle(
+                            Title.title(
+                                Component.empty(),
+                                Component.text("Double jump will be enabled in ${timeLeft - doubleJumpTime} seconds!", NamedTextColor.GRAY),
                                 Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
                             )
                         )
@@ -470,7 +470,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 }
                 scoreboard!!.updateLineContent(
                     "time_left",
-                    Component.text("Time left: ${timeLeft.parsed()}", NamedTextColor.GREEN)
+                    Component.text()
+                        .append(Component.text("Time left: ", TextColor.color(59, 128, 59)))
+                        .append(Component.text(timeLeft.parsed(), NamedTextColor.GREEN))
+                        .build()
                 )
             }
         }
@@ -512,22 +515,21 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val randomMap = Path.of("./maps/parkourtag/" + Files.list(Path.of("./maps/parkourtag/"))
             .map { it.nameWithoutExtension }
             .collect(Collectors.toSet())
-            .random() + ".schem")
+            .random() + ".tnt")
 
-        val schematic = SpongeSchematic()
-        schematic.read(randomMap.inputStream())
+        //val schematic = SpongeSchematic()
+        //schematic.read(randomMap.inputStream())
 
 //        val schematic = Schematics.file(randomMap, Schemas.SPONGE)
 //        val data = Blocky.builder().compression(true).build().read(schematic)
 
         val instance = Manager.instance.createInstanceContainer(
-            Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
+            //Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
         )
-        instance.chunkLoader = SchematicChunkLoader.builder()
-            .addSchematic(schematic)
-            .build()
-
-        //spawnPosition = Pos(schematic.width / 2.0, 10.0, schematic.length / 2.0)
+//        instance.chunkLoader = SchematicChunkLoader.builder()
+//            .addSchematic(schematic)
+//            .build()
+        instance.chunkLoader = TNTLoader(instance, randomMap)
 
         mapConfig = ParkourTagExtension.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
 
