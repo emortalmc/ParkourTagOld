@@ -12,19 +12,18 @@ repositories {
     mavenCentral()
 
     maven(url = "https://jitpack.io")
-    maven(url = "https://repo.crystalgames.net/snapshots/")
 }
 
 dependencies {
     //compileOnly(kotlin("stdlib"))
 
-    compileOnly("com.github.Minestom:Minestom:0989c220f6")
-    compileOnly("com.github.EmortalMC:Immortal:5be023dfae")
+    compileOnly("com.github.Minestom:Minestom:08f37400b0")
+    compileOnly("com.github.EmortalMC:Immortal:c2e3d4f7c4")
     //implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
     //implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 
-    implementation("com.github.EmortalMC:TNT:34bae5bb0c")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
+    //implementation("com.github.EmortalMC:TNT:34bae5bb0c")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
 
 }

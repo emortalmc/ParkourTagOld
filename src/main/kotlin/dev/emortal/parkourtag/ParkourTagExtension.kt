@@ -4,14 +4,18 @@ import dev.emortal.immortal.config.ConfigHelper
 import dev.emortal.immortal.config.GameOptions
 import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.WhenToRegisterEvents
+import dev.emortal.parkourtag.commands.RigCommand
 import dev.emortal.parkourtag.game.ParkourTagGame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.minestom.server.extensions.Extension
+import net.minestom.server.utils.NamespaceID
+import net.minestom.server.world.DimensionType
+import world.cepi.kstom.Manager
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.stream.Collectors
 import kotlin.io.path.nameWithoutExtension
 
@@ -26,7 +30,13 @@ class ParkourTagExtension : Extension() {
         logger.info("Found ${maps.size} maps:\n- ${maps.joinToString("\n- ")}")
 
         val parkourConfig = ParkourConfig()
-        val mapConfigMap = mutableMapOf<String, MapConfig>()
+        val mapConfigMap = ConcurrentHashMap<String, MapConfig>()
+
+        Manager.dimensionType.addDimension(
+            DimensionType.builder(NamespaceID.from("immortal:the_end"))
+                .effects("minecraft:the_end")
+                .build()
+        )
 
         maps.forEach {
             mapConfigMap[it] = MapConfig()
@@ -36,10 +46,10 @@ class ParkourTagExtension : Extension() {
         config = ConfigHelper.initConfigFile(Path.of("./parkour.json"), parkourConfig)
 
         GameManager.registerGame<ParkourTagGame>(
-            "hideandseek",
-            Component.text("Hide and Seek", NamedTextColor.GREEN, TextDecoration.BOLD),
-            true,
-            true,
+            "parkourtag",
+            Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
+            showsInSlashPlay = true,
+            canSpectate = true,
             WhenToRegisterEvents.NEVER,
             GameOptions(
                 minPlayers = 2,
@@ -51,10 +61,14 @@ class ParkourTagExtension : Extension() {
             )
         )
 
+        RigCommand.register()
+
         logger.info("[ParkourTag] Initialized!")
     }
 
     override fun terminate() {
+        RigCommand.unregister()
+
         logger.info("[ParkourTag] Terminated!")
     }
 

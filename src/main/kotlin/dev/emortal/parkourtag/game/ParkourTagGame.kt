@@ -8,7 +8,6 @@ import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagExtension
 import dev.emortal.parkourtag.utils.showFirework
-import dev.emortal.tnt.TNTLoader
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -26,6 +25,7 @@ import net.minestom.server.entity.Player
 import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.player.PlayerStartFlyingEvent
 import net.minestom.server.event.player.PlayerTickEvent
+import net.minestom.server.instance.AnvilLoader
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.firework.FireworkEffect
@@ -37,6 +37,7 @@ import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
+import net.minestom.server.utils.NamespaceID
 import net.minestom.server.utils.time.TimeUnit
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
@@ -73,15 +74,17 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override var spawnPosition = Pos(0.5, 65.0, 0.5)
 
+    var riggedPlayer: Player? = null
+
     lateinit var mapConfig: MapConfig
 
     private val taggerTitle = Title.title(
-        Component.text("SEEKER", NamedTextColor.RED, TextDecoration.BOLD),
-        Component.text("Tag all of the hiders!", NamedTextColor.GRAY)
+        Component.text("TAGGER", NamedTextColor.RED, TextDecoration.BOLD),
+        Component.text("Tag all of the goons!", NamedTextColor.GRAY)
     )
     private val goonTitle = Title.title(
-        Component.text("HIDER", NamedTextColor.GREEN, TextDecoration.BOLD),
-        Component.text("Run away from the seekers!", NamedTextColor.GRAY)
+        Component.text("GOON", NamedTextColor.GREEN, TextDecoration.BOLD),
+        Component.text("Run away from the taggers!", NamedTextColor.GRAY)
     )
 
     override fun playerJoin(player: Player) {
@@ -123,12 +126,20 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             }
 
             override fun cancelled() {
+                val tagger = if (riggedPlayer == null) {
+                    picked
+                } else {
+                    picked.isGlowing = false
+                    riggedPlayer!!.isGlowing = true
+                    riggedPlayer!!
+                }
+
                 object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.tick(2), iterations = 10L*3L) {
                     override fun run() {
                         showTitle(
                             Title.title(
-                                "<rainbow:${currentIteration}>${picked.username}".asMini(),
-                                Component.text("is the seeker", NamedTextColor.GRAY),
+                                "<rainbow:${currentIteration}>${tagger.username}".asMini(),
+                                Component.text("is the tagger", NamedTextColor.GRAY),
                                 Title.Times.times(
                                     Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(500)
                                 )
@@ -147,7 +158,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     )
                 )
 
-                taggersTeam.add(picked)
+                taggersTeam.add(tagger)
 
                 scoreboard?.updateLineContent("infoLine", Component.empty())
 
@@ -190,9 +201,10 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
 
             if (player.gameMode == GameMode.ADVENTURE) {
-                if (player.instance!!.getBlock(player.position).compare(Block.RAIL) &&
+                if ((player.instance!!.getBlock(player.position).compare(Block.RAIL) &&
                     player.instance!!.getBlock(player.position.add(0.0, 1.0, 0.0))
-                        .compare(Block.STRUCTURE_VOID)
+                        .compare(Block.STRUCTURE_VOID))
+                    || player.instance!!.getBlock(player.position).compare(Block.AMETHYST_CLUSTER)
                 ) {
                     if (player.hasTag(launchCooldownTag)) return@listenOnly
 
@@ -249,7 +261,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
 
         scoreboard!!.updateLineContent(
-            "goons_left", Component.text("Hiders: ", NamedTextColor.GRAY)
+            "goons_left", Component.text("Goons: ", NamedTextColor.GRAY)
                 .append(Component.text(goonsTeam.players.size, NamedTextColor.RED))
         )
 
@@ -299,9 +311,11 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         holdingEntity.setNoGravity(true)
         holdingEntity.isInvisible = true
 
-        holdingEntity.setInstance(instance, mapConfig.taggerSpawnPosition).thenRun {
-            taggersTeam.players.forEach {
-                holdingEntity.addPassenger(it)
+        instance.get()?.let { instance ->
+            holdingEntity.setInstance(instance, mapConfig.taggerSpawnPosition).thenRun {
+                taggersTeam.players.forEach {
+                    holdingEntity.addPassenger(it)
+                }
             }
         }
 
@@ -332,7 +346,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             Sidebar.ScoreboardLine(
                 "goons_left",
                 Component.text()
-                    .append(Component.text("Hiders: ", NamedTextColor.GRAY))
+                    .append(Component.text("Goons: ", NamedTextColor.GRAY))
                     .append(Component.text(goonsTeam.players.size, NamedTextColor.RED))
                     .build(),
                 2
@@ -343,7 +357,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             Sidebar.ScoreboardLine(
                 "tagger",
                 Component.text()
-                    .append(Component.text("Seekers: ", NamedTextColor.GRAY))
+                    .append(Component.text("Taggers: ", NamedTextColor.GRAY))
                     .append(Component.text(taggersTeam.players.joinToString { it.username }, NamedTextColor.GOLD))
                     .build(),
                 0
@@ -354,7 +368,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             .delay(Duration.ofSeconds(2))
             .schedule()
         Manager.scheduler.buildTask {
-            val title = Title.title(Component.empty(), Component.text("Seeker has been released!", NamedTextColor.YELLOW), Title.Times.times(Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)))
+            val title = Title.title(Component.empty(), Component.text("Tagger has been released!", NamedTextColor.YELLOW), Title.Times.times(Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)))
             val sound = Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f)
 
             holdingEntity.remove()
@@ -365,7 +379,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 it.clearEffects()
                 it.showTitle(title)
                 it.playSound(sound, Emitter.self())
-                it.askSynchronization() // Seeker is sometimes out of sync once dismounting
+                it.askSynchronization() // Tagger is sometimes out of sync once dismounting
             }
         }.delay(Duration.ofSeconds(7)).schedule()
 
@@ -426,7 +440,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         showTitle(
                             Title.title(
                                 Component.empty(),
-                                Component.text("Hiders are now glowing!", NamedTextColor.GRAY),
+                                Component.text("Goons are now glowing!", NamedTextColor.GRAY),
                                 Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
                             )
                         )
@@ -446,7 +460,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                         showTitle(
                             Title.title(
                                 Component.empty(),
-                                Component.text("Hiders will glow in ${timeLeft - glowingTime} seconds!", NamedTextColor.GRAY),
+                                Component.text("Goons will glow in ${timeLeft - glowingTime} seconds!", NamedTextColor.GRAY),
                                 Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
                             )
                         )
@@ -482,23 +496,23 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override fun gameWon(winningPlayers: Collection<Player>) {
         taskGroup.cancel()
 
-        val seekersWon = goonsTeam.players.isEmpty()
+        val taggersWon = goonsTeam.players.isEmpty()
 
         val message = Component.text()
             .append(Component.text(" ${centerText("VICTORY", true)}", NamedTextColor.GOLD, TextDecoration.BOLD))
             .also {
-                if (seekersWon) {
-                    it.append(Component.text("\n${centerText("All of the hiders were found!")}", NamedTextColor.GRAY))
+                if (taggersWon) {
+                    it.append(Component.text("\n${centerText("All of the Goons were found!")}", NamedTextColor.GRAY))
                 } else {
-                    it.append(Component.text("\n${centerText("The seekers ran out of time!")}", NamedTextColor.GRAY))
+                    it.append(Component.text("\n${centerText("The taggers ran out of time!")}", NamedTextColor.GRAY))
                 }
             }
-            .append(Component.text("\n\n ${centerSpaces("Winning team: Seeker")}Winning team: ", NamedTextColor.GRAY))
+            .append(Component.text("\n\n ${centerSpaces("Winning team: Tagger")}Winning team: ", NamedTextColor.GRAY))
             .also {
-                if (seekersWon) {
-                    it.append(Component.text("Seekers", NamedTextColor.RED, TextDecoration.BOLD))
+                if (taggersWon) {
+                    it.append(Component.text("Taggers", NamedTextColor.RED, TextDecoration.BOLD))
                 } else {
-                    it.append(Component.text("Hiders", NamedTextColor.GREEN, TextDecoration.BOLD))
+                    it.append(Component.text("Goons", NamedTextColor.GREEN, TextDecoration.BOLD))
                         .append(Component.text("\n ${centerSpaces("Survivors: ${goonsTeam.players.joinToString { it.username }}")}Survivors: ", NamedTextColor.GRAY))
                         .append(Component.text(goonsTeam.players.joinToString { it.username }, NamedTextColor.WHITE))
                 }
@@ -515,21 +529,19 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         val randomMap = Path.of("./maps/parkourtag/" + Files.list(Path.of("./maps/parkourtag/"))
             .map { it.nameWithoutExtension }
             .collect(Collectors.toSet())
-            .random() + ".tnt")
+            .random())
 
-        //val schematic = SpongeSchematic()
-        //schematic.read(randomMap.inputStream())
+        val instance =
+            if (randomMap.nameWithoutExtension == "endpillar") {
+                Manager.instance.createInstanceContainer(
+                    Manager.dimensionType.getDimension(NamespaceID.from("immortal:the_end"))!!
+                )
 
-//        val schematic = Schematics.file(randomMap, Schemas.SPONGE)
-//        val data = Blocky.builder().compression(true).build().read(schematic)
+            } else {
+                Manager.instance.createInstanceContainer()
+            }
 
-        val instance = Manager.instance.createInstanceContainer(
-            //Manager.dimensionType.getDimension(NamespaceID.from("fullbright"))!!
-        )
-//        instance.chunkLoader = SchematicChunkLoader.builder()
-//            .addSchematic(schematic)
-//            .build()
-        instance.chunkLoader = TNTLoader(instance, randomMap)
+        instance.chunkLoader = AnvilLoader(randomMap)
 
         mapConfig = ParkourTagExtension.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
 
