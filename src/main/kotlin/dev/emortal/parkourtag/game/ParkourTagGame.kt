@@ -49,6 +49,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.stream.Collectors
 import kotlin.io.path.nameWithoutExtension
 import kotlin.math.roundToInt
@@ -75,6 +76,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     override var spawnPosition = Pos(0.5, 65.0, 0.5)
 
     var riggedPlayer: Player? = null
+    val canHitPlayers = AtomicBoolean(false)
 
     lateinit var mapConfig: MapConfig
 
@@ -171,7 +173,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override fun registerEvents() = with(eventNode) {
         listenOnly<EntityAttackEvent> {
-            if (target !is Player || entity !is Player || gameState == GameState.ENDING) return@listenOnly
+            if (target !is Player || entity !is Player || !canHitPlayers.get()) return@listenOnly
 
             val target = target as Player
             val attacker = entity as Player
@@ -221,7 +223,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             player.isFlying = false
             player.isAllowFlying = false
-            player.velocity = player.position.direction().mul(15.0).withY(18.0)
+            player.velocity = player.position.direction().mul(18.0).withY(14.0)
             playSound(
                 Sound.sound(
                     SoundEvent.ENTITY_GENERIC_EXPLODE,
@@ -371,6 +373,8 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             val title = Title.title(Component.empty(), Component.text("Tagger has been released!", NamedTextColor.YELLOW), Title.Times.times(Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)))
             val sound = Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f)
 
+            canHitPlayers.set(true)
+
             holdingEntity.remove()
             taggersTeam.players.forEach {
                 it.teleport(mapConfig.taggerSpawnPosition)
@@ -495,6 +499,8 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     override fun gameWon(winningPlayers: Collection<Player>) {
         taskGroup.cancel()
+
+        canHitPlayers.set(false)
 
         val taggersWon = goonsTeam.players.isEmpty()
 
