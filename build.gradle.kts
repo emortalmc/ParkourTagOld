@@ -24,7 +24,7 @@ dependencies {
 
     //implementation("com.github.EmortalMC:TNT:34bae5bb0c")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
 
 }
 
