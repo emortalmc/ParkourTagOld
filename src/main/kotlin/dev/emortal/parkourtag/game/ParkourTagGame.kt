@@ -1,19 +1,18 @@
 package dev.emortal.parkourtag.game
 
-import dev.emortal.immortal.config.GameOptions
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagExtension
-import dev.emortal.parkourtag.utils.showFirework
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
 import net.minestom.server.color.Color
 import net.minestom.server.coordinate.Pos
@@ -22,10 +21,13 @@ import net.minestom.server.entity.Entity
 import net.minestom.server.entity.EntityType
 import net.minestom.server.entity.GameMode
 import net.minestom.server.entity.Player
+import net.minestom.server.event.EventNode
 import net.minestom.server.event.entity.EntityAttackEvent
 import net.minestom.server.event.player.PlayerStartFlyingEvent
 import net.minestom.server.event.player.PlayerTickEvent
+import net.minestom.server.event.trait.InstanceEvent
 import net.minestom.server.instance.AnvilLoader
+import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.Instance
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.firework.FireworkEffect
@@ -48,6 +50,7 @@ import world.cepi.kstom.util.playSound
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.stream.Collectors
@@ -55,25 +58,32 @@ import kotlin.io.path.nameWithoutExtension
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
+class ParkourTagGame : PvpGame() {
     private val goonsTeam =
-        registerTeam(
-            Team(
-                "Goons",
-                NamedTextColor.WHITE,
-                nameTagVisibility = TeamsPacket.NameTagVisibility.NEVER,
-                canSeeInvisiblePlayers = true
-            )
+        Team(
+            "Goons",
+            NamedTextColor.WHITE,
+            nameTagVisibility = TeamsPacket.NameTagVisibility.NEVER,
+            canSeeInvisiblePlayers = true
         )
-    private val taggersTeam = registerTeam(
+    private val taggersTeam =
         Team(
             "Taggers",
             NamedTextColor.RED,
             nameTagVisibility = TeamsPacket.NameTagVisibility.NEVER
         )
-    )
 
-    override var spawnPosition = Pos(0.5, 65.0, 0.5)
+
+    override val maxPlayers: Int = 8
+    override val minPlayers: Int = 2
+    override val countdownSeconds: Int = 15
+    override val canJoinDuringGame: Boolean = false
+    override val showScoreboard: Boolean = true
+    override val showsJoinLeaveMessages: Boolean = true
+    override val allowsSpectators: Boolean = true
+
+
+    override fun getSpawnPosition(player: Player, spectator: Boolean): Pos = Pos(0.5, 65.0, 0.5)
 
     var riggedPlayer: Player? = null
     val canHitPlayers = AtomicBoolean(false)
@@ -90,41 +100,82 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     )
 
     override fun playerJoin(player: Player) {
+        player.sendMessage(
+            Component.text()
+                .append(Component.text("${centerSpaces("Welcome to Parkour Tag")}Welcome to ", NamedTextColor.GRAY))
+                .append(MiniMessage.miniMessage().deserialize("<green><bold>Parkour Tag"))
+                .append(
+                    MiniMessage.miniMessage().deserialize("\n\n" +
+                        "<yellow>Parkour Tag is a simple game of <color:#ffcc55>hide and seek</color>." +
+                        "\nAt the start of the game you are assigned <red><bold>Tagger</bold></red> or <green><bold>Goon</bold></green>." +
+                        "\nLeft click on players to tag them!"
+                ))
+                .armify()
+        )
     }
 
     override fun playerLeave(player: Player) {
+
+        if (gameState == GameState.PLAYING) {
+            goonsTeam.remove(player)
+            taggersTeam.remove(player)
+
+            if (taggersTeam.players.isEmpty()) {
+                victory(goonsTeam)
+                Logger.warn("Taggers died")
+            }
+            if (goonsTeam.players.isEmpty()) {
+                victory(taggersTeam)
+                Logger.warn("goons died")
+            }
+        }
     }
 
     override fun gameStarted() {
 
         scoreboard?.updateLineContent("infoLine", Component.text("Rolling...", NamedTextColor.GRAY))
 
-        object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.nextTick(), iterations = 17L) {
+        object : MinestomRunnable(repeat = Duration.ofMillis(50), group = runnableGroup) {
             var picked = players.random()
             val offset = ThreadLocalRandom.current().nextInt(players.size)
 
+            var nameIter = 0 // max 17
+            var ticksUntil = 1
+
             override fun run() {
-                if (gameState == GameState.ENDING || players.size == 0) {
+                if (gameState == GameState.ENDING || players.isEmpty()) {
                     cancel()
                     return
                 }
 
-                delaySchedule = TaskSchedule.duration((currentIteration / 1.2).toLong().coerceAtLeast(1L), TimeUnit.SERVER_TICK)
+                ticksUntil--
 
-                picked.isGlowing = false
-                picked = players.elementAt(((currentIteration + offset) % players.size).toInt())
-                picked.isGlowing = true
+                if (ticksUntil == 0) {
+                    if (nameIter == 17) {
+                        cancel()
+                        cancelled()
+                        return
+                    }
 
-                playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
-                showTitle(
-                    Title.title(
-                        Component.text(picked.username),
-                        Component.empty(),
-                        Title.Times.times(
-                            Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)
+                    ticksUntil = (nameIter / 1.2).toInt().coerceAtLeast(1)
+
+                    picked.isGlowing = false
+                    picked = players.elementAt(((nameIter + offset) % players.size))
+                    picked.isGlowing = true
+
+                    playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
+                    showTitle(
+                        Title.title(
+                            Component.text(picked.username),
+                            Component.empty(),
+                            Title.Times.times(
+                                Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)
+                            )
                         )
                     )
-                )
+
+                    nameIter++
+                }
             }
 
             override fun cancelled() {
@@ -136,7 +187,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                     riggedPlayer!!
                 }
 
-                object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.tick(2), iterations = 10L*3L) {
+                object : MinestomRunnable(repeat = Duration.ofMillis(100), iterations = 10*3, group = runnableGroup) {
                     override fun run() {
                         showTitle(
                             Title.title(
@@ -171,7 +222,8 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         }
     }
 
-    override fun registerEvents() = with(eventNode) {
+    override fun registerEvents(eventNode: EventNode<InstanceEvent>) = with(eventNode) {
+        val booped = Tag.Boolean("booped")
         listenOnly<EntityAttackEvent> {
             if (target !is Player || entity !is Player || !canHitPlayers.get()) return@listenOnly
 
@@ -180,10 +232,28 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
             if (target.gameMode != GameMode.ADVENTURE || attacker.gameMode != GameMode.ADVENTURE) return@listenOnly
 
+            // booping hehe
+            if (!taggersTeam.players.contains(attacker) && taggersTeam.players.contains(target)) {
+                if (attacker.hasTag(booped)) return@listenOnly
+                attacker.setTag(booped, true)
+                attacker.sendMessage(Component.text("You booped ${target.username}!", NamedTextColor.GREEN))
+                attacker.playSound(Sound.sound(SoundEvent.ENTITY_DONKEY_CHEST, Sound.Source.MASTER, 1f, 2f), target.position)
+
+                target.scheduler().buildTask {
+                    attacker.removeTag(booped)
+
+                    if (!attacker.isOnline) return@buildTask
+                    target.sendMessage(Component.text("${attacker.username} booped you!", NamedTextColor.GREEN))
+                    target.playSound(Sound.sound(SoundEvent.ENTITY_DONKEY_CHEST, Sound.Source.MASTER, 1f, 2f), attacker.position)
+                }.delay(Duration.ofSeconds(3)).schedule()
+
+                return@listenOnly
+            }
+
             if (taggersTeam.players.contains(attacker) && !taggersTeam.players.contains(target)) {
                 val minDistance = target.position.add(0.0, 1.5, 0.0).distanceSquared(attacker.position.add(0.0, 1.5, 0.0))
                     .coerceAtMost(target.position.distanceSquared(attacker.position.add(0.0, 1.5, 0.0)))
-                if (minDistance > 3.5*3.5) return@listenOnly
+                if (minDistance > 4.5*4.5) return@listenOnly
 
                 kill(target, attacker)
             }
@@ -234,9 +304,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 player.position
             )
 
-            object : MinestomRunnable(taskGroup = taskGroup, repeat = Duration.ofSeconds(1), iterations = 3) {
+            object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = 3, group = runnableGroup) {
                 override fun run() {
-                    player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${iterations - currentIteration}s".asMini())
+                    player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${iterations - currentIteration.get()}s".asMini())
                 }
 
                 override fun cancelled() {
@@ -313,8 +383,8 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         holdingEntity.setNoGravity(true)
         holdingEntity.isInvisible = true
 
-        instance.get()?.let { instance ->
-            holdingEntity.setInstance(instance, mapConfig.taggerSpawnPosition).thenRun {
+        instance?.let {
+            holdingEntity.setInstance(it, mapConfig.taggerSpawnPosition).thenRun {
                 taggersTeam.players.forEach {
                     holdingEntity.addPassenger(it)
                 }
@@ -323,7 +393,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
         taggersTeam.players.forEach {
             it.showTitle(taggerTitle)
-            it.addEffect(Potion(PotionEffect.BLINDNESS, 1, 8*20))
+//            it.addEffect(Potion(PotionEffect.BLINDNESS, 1, 8*20))
             it.teleport(mapConfig.taggerSpawnPosition)
             it.isGlowing = true
         }
@@ -366,10 +436,20 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
             )
         )
 
-        Manager.scheduler.buildTask { registerEvents() }
+        Manager.scheduler.buildTask { registerEvents(instance!!.eventNode()) }
             .delay(Duration.ofSeconds(2))
             .schedule()
+
+        goonsTeam.players.forEach {
+            it.updateViewableRule { !taggersTeam.players.contains(it) }
+            it.updateViewableRule()
+        }
+
         Manager.scheduler.buildTask {
+            goonsTeam.players.forEach {
+                it.updateViewableRule { true }
+            }
+
             val title = Title.title(Component.empty(), Component.text("Tagger has been released!", NamedTextColor.YELLOW), Title.Times.times(Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)))
             val sound = Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 1f, 1f)
 
@@ -380,7 +460,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                 it.teleport(mapConfig.taggerSpawnPosition)
             }
             players.forEach {
-                it.clearEffects()
+//                it.clearEffects()
                 it.showTitle(title)
                 it.playSound(sound, Emitter.self())
                 it.askSynchronization() // Tagger is sometimes out of sync once dismounting
@@ -392,14 +472,14 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
 
     private fun startTimer() {
         val playerCount = players.size
-        val glowingTime = 15L + ((playerCount * 15L) / 8L) // 30 seconds with 8 players, 18 with 2
-        val doubleJumpTime = glowingTime / 2L // 15 seconds with 8 players, 9 with 2
-        val playTime = 240L / (12L - playerCount) // 60 seconds with 8 players, 24 with 2
+        val glowingTime = 15 + ((playerCount * 15) / 8) // 30 seconds with 8 players, 18 with 2
+        val doubleJumpTime = glowingTime / 2 // 15 seconds with 8 players, 9 with 2
+        val playTime = 240 / (12 - playerCount) // 60 seconds with 8 players, 24 with 2
 
-        object : MinestomRunnable(taskGroup = taskGroup, repeat = TaskSchedule.duration(1, TimeUnit.SECOND), delay = TaskSchedule.nextTick(), iterations = 90L) {
+        object : MinestomRunnable(repeat = Duration.ofSeconds(1), delay = Duration.ofMillis(50), iterations = 90, group = runnableGroup) {
             override fun run() {
-                val currentIter = currentIteration
-                val timeLeft = (iterations - currentIteration) - 1
+                val currentIter = currentIteration.get()
+                val timeLeft = (iterations - currentIter) - 1
 
                 if (timeLeft > glowingTime) {
                     scoreboard?.updateLineContent(
@@ -449,7 +529,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == (doubleJumpTime + 10L) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
+                    timeLeft == (doubleJumpTime + 10) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
                         playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
                         showTitle(
                             Title.title(
@@ -459,7 +539,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == (glowingTime + 10L) || (timeLeft <= (glowingTime + 5) && timeLeft > glowingTime) -> {
+                    timeLeft == (glowingTime + 10) || (timeLeft <= (glowingTime + 5) && timeLeft > glowingTime) -> {
                         playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
                         showTitle(
                             Title.title(
@@ -469,7 +549,7 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
                             )
                         )
                     }
-                    timeLeft == 0L -> {
+                    timeLeft == 0 -> {
                         //Logger.warn("Ran out of time - iter: ${currentIteration}")`
                         victory(goonsTeam)
                         return
@@ -498,9 +578,9 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
     }
 
     override fun gameWon(winningPlayers: Collection<Player>) {
-        taskGroup.cancel()
-
         canHitPlayers.set(false)
+
+        runnableGroup.cancelAll()
 
         val taggersWon = goonsTeam.players.isEmpty()
 
@@ -528,34 +608,44 @@ class ParkourTagGame(gameOptions: GameOptions) : PvpGame(gameOptions) {
         sendMessage(message)
     }
 
-    override fun gameDestroyed() {
+    override fun gameEnded() {
     }
 
-    override fun instanceCreate(): Instance {
-        val randomMap = Path.of("./maps/parkourtag/" + Files.list(Path.of("./maps/parkourtag/"))
-            .map { it.nameWithoutExtension }
+    override fun instanceCreate(): CompletableFuture<Instance> {
+        val instanceFuture = CompletableFuture<Instance>()
+
+        val randomMap = Files.list(Path.of("./maps/parkourtag/"))
             .collect(Collectors.toSet())
-            .random())
+            .random()
 
-        val instance =
-            if (randomMap.nameWithoutExtension == "endpillar") {
-                Manager.instance.createInstanceContainer(
-                    Manager.dimensionType.getDimension(NamespaceID.from("immortal:the_end"))!!
-                )
+        val newInstance = Manager.instance.createInstanceContainer()
 
-            } else {
-                Manager.instance.createInstanceContainer()
-            }
-
-        instance.chunkLoader = AnvilLoader(randomMap)
+        newInstance.chunkLoader = AnvilLoader(randomMap)
 
         mapConfig = ParkourTagExtension.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
 
-        instance.time = 0
-        instance.timeRate = 0
-        instance.timeUpdate = null
+        newInstance.time = 0
+        newInstance.timeRate = 0
+        newInstance.timeUpdate = null
 
-        return instance
+        newInstance.enableAutoChunkLoad(false)
+        newInstance.setTag(Tag.Boolean("doNotAutoUnloadChunk"), true)
+
+        val radius = 5
+        val chunkFutures = mutableListOf<CompletableFuture<Chunk>>()
+        var i = 0
+        for (x in -radius..radius) {
+            for (z in -radius..radius) {
+                newInstance.loadChunk(x, z).let { chunkFutures.add(it) }
+                i++
+            }
+        }
+
+        CompletableFuture.allOf(*chunkFutures.toTypedArray()).thenRunAsync {
+            instanceFuture.complete(newInstance)
+        }
+
+        return instanceFuture
     }
 
 }

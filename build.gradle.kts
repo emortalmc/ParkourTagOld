@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.7.10"
-    kotlin("plugin.serialization") version "1.7.10"
+    id("org.jetbrains.kotlin.jvm") version "1.7.20"
+    kotlin("plugin.serialization") version "1.7.20"
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
     java
@@ -17,14 +17,14 @@ repositories {
 dependencies {
     //compileOnly(kotlin("stdlib"))
 
-    compileOnly("com.github.Minestom:Minestom:08f37400b0")
-    compileOnly("com.github.EmortalMC:Immortal:c2e3d4f7c4")
+    compileOnly("com.github.Minestom:Minestom:42195c536b")
+    compileOnly("com.github.EmortalMC:Immortal:5b2b3a057a")
     //implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
     //implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
 
     //implementation("com.github.EmortalMC:TNT:34bae5bb0c")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.3")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
 
 }
 

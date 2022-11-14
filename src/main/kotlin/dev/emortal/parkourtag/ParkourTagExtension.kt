@@ -1,18 +1,19 @@
 package dev.emortal.parkourtag
 
 import dev.emortal.immortal.config.ConfigHelper
-import dev.emortal.immortal.config.GameOptions
 import dev.emortal.immortal.game.GameManager
-import dev.emortal.immortal.game.WhenToRegisterEvents
 import dev.emortal.parkourtag.commands.RigCommand
 import dev.emortal.parkourtag.game.ParkourTagGame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.minestom.server.MinecraftServer
 import net.minestom.server.extensions.Extension
 import net.minestom.server.utils.NamespaceID
 import net.minestom.server.world.DimensionType
 import world.cepi.kstom.Manager
+import world.cepi.kstom.command.register
+import world.cepi.kstom.command.unregister
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -48,17 +49,7 @@ class ParkourTagExtension : Extension() {
         GameManager.registerGame<ParkourTagGame>(
             "parkourtag",
             Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD),
-            showsInSlashPlay = true,
-            canSpectate = true,
-            WhenToRegisterEvents.NEVER,
-            GameOptions(
-                minPlayers = 2,
-                maxPlayers = 8,
-                countdownSeconds = 15,
-                canJoinDuringGame = false,
-                showScoreboard = true,
-                showsJoinLeaveMessages = true,
-            )
+            showsInSlashPlay = true
         )
 
         RigCommand.register()
