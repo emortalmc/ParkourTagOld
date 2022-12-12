@@ -1,11 +1,12 @@
 package dev.emortal.parkourtag.game
 
+import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
-import dev.emortal.parkourtag.ParkourTagExtension
+import dev.emortal.parkourtag.ParkourTagMain
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -38,9 +39,6 @@ import net.minestom.server.potion.PotionEffect
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
-import net.minestom.server.timer.TaskSchedule
-import net.minestom.server.utils.NamespaceID
-import net.minestom.server.utils.time.TimeUnit
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
@@ -76,7 +74,7 @@ class ParkourTagGame : PvpGame() {
 
     override val maxPlayers: Int = 8
     override val minPlayers: Int = 2
-    override val countdownSeconds: Int = 15
+    override val countdownSeconds: Int = 20
     override val canJoinDuringGame: Boolean = false
     override val showScoreboard: Boolean = true
     override val showsJoinLeaveMessages: Boolean = true
@@ -87,6 +85,7 @@ class ParkourTagGame : PvpGame() {
 
     var riggedPlayer: Player? = null
     val canHitPlayers = AtomicBoolean(false)
+    val countDownFinished = AtomicBoolean(false)
 
     lateinit var mapConfig: MapConfig
 
@@ -116,17 +115,23 @@ class ParkourTagGame : PvpGame() {
 
     override fun playerLeave(player: Player) {
 
-        if (gameState == GameState.PLAYING) {
+        if (gameState == GameState.PLAYING && countDownFinished.get()) {
             goonsTeam.remove(player)
             taggersTeam.remove(player)
 
             if (taggersTeam.players.isEmpty()) {
                 victory(goonsTeam)
-                Logger.warn("Taggers died")
             }
             if (goonsTeam.players.isEmpty()) {
                 victory(taggersTeam)
-                Logger.warn("goons died")
+            }
+            return
+        }
+
+        val nonSpectators = players.filter { it.hasTag(GameManager.spectatingTag) }
+        if (nonSpectators.size <= 1) {
+            if (nonSpectators.isNotEmpty()) {
+                victory(nonSpectators.first())
             }
         }
     }
@@ -393,7 +398,7 @@ class ParkourTagGame : PvpGame() {
 
         taggersTeam.players.forEach {
             it.showTitle(taggerTitle)
-//            it.addEffect(Potion(PotionEffect.BLINDNESS, 1, 8*20))
+            it.addEffect(Potion(PotionEffect.BLINDNESS, 1, 8*20))
             it.teleport(mapConfig.taggerSpawnPosition)
             it.isGlowing = true
         }
@@ -440,14 +445,16 @@ class ParkourTagGame : PvpGame() {
             .delay(Duration.ofSeconds(2))
             .schedule()
 
-        goonsTeam.players.forEach {
-            it.updateViewableRule { !taggersTeam.players.contains(it) }
-            it.updateViewableRule()
+        taggersTeam.players.forEach {
+            it.updateViewerRule { viewEnt -> viewEnt.entityId == holdingEntity.entityId }
         }
 
+        countDownFinished.set(true)
+
         Manager.scheduler.buildTask {
-            goonsTeam.players.forEach {
-                it.updateViewableRule { true }
+
+            taggersTeam.players.forEach {
+                it.updateViewerRule { true }
             }
 
             val title = Title.title(Component.empty(), Component.text("Tagger has been released!", NamedTextColor.YELLOW), Title.Times.times(Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)))
@@ -460,7 +467,7 @@ class ParkourTagGame : PvpGame() {
                 it.teleport(mapConfig.taggerSpawnPosition)
             }
             players.forEach {
-//                it.clearEffects()
+                it.clearEffects()
                 it.showTitle(title)
                 it.playSound(sound, Emitter.self())
                 it.askSynchronization() // Tagger is sometimes out of sync once dismounting
@@ -586,13 +593,7 @@ class ParkourTagGame : PvpGame() {
 
         val message = Component.text()
             .append(Component.text(" ${centerText("VICTORY", true)}", NamedTextColor.GOLD, TextDecoration.BOLD))
-            .also {
-                if (taggersWon) {
-                    it.append(Component.text("\n${centerText("All of the Goons were found!")}", NamedTextColor.GRAY))
-                } else {
-                    it.append(Component.text("\n${centerText("The taggers ran out of time!")}", NamedTextColor.GRAY))
-                }
-            }
+            .append(Component.text("\n${centerText(if (taggersWon) "All of the Goons were found!" else "The taggers ran out of time!")}", NamedTextColor.GRAY))
             .append(Component.text("\n\n ${centerSpaces("Winning team: Tagger")}Winning team: ", NamedTextColor.GRAY))
             .also {
                 if (taggersWon) {
@@ -622,7 +623,7 @@ class ParkourTagGame : PvpGame() {
 
         newInstance.chunkLoader = AnvilLoader(randomMap)
 
-        mapConfig = ParkourTagExtension.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
+        mapConfig = ParkourTagMain.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
 
         newInstance.time = 0
         newInstance.timeRate = 0
@@ -636,12 +637,12 @@ class ParkourTagGame : PvpGame() {
         var i = 0
         for (x in -radius..radius) {
             for (z in -radius..radius) {
-                newInstance.loadChunk(x, z).let { chunkFutures.add(it) }
+                chunkFutures.add(newInstance.loadChunk(x, z))
                 i++
             }
         }
 
-        CompletableFuture.allOf(*chunkFutures.toTypedArray()).thenRunAsync {
+        CompletableFuture.allOf(*chunkFutures.toTypedArray()).thenRun {
             instanceFuture.complete(newInstance)
         }
 

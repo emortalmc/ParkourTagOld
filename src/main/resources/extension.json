@@ -1,8 +1,0 @@
-{
-  "entrypoint": "${project.group}.${project.mainClass}",
-  "name": "ParkourTag",
-  "version": "${project.version}",
-  "dependencies": [
-    "Immortal"
-  ]
-}

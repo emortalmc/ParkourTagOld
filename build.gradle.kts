@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.7.20"
-    kotlin("plugin.serialization") version "1.7.20"
+    id("org.jetbrains.kotlin.jvm") version "1.7.22"
+    kotlin("plugin.serialization") version "1.7.22"
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
     java
@@ -10,6 +10,7 @@ plugins {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 
     maven(url = "https://jitpack.io")
 }
@@ -17,28 +18,37 @@ repositories {
 dependencies {
     //compileOnly(kotlin("stdlib"))
 
-    compileOnly("com.github.Minestom:Minestom:42195c536b")
-    compileOnly("com.github.EmortalMC:Immortal:5b2b3a057a")
-    //implementation("com.github.emortaldev:Scaffolding:2dc67e4459")
-    //implementation(files("libs/Blocky-1.0-SNAPSHOT.jar"))
+    compileOnly("com.github.Minestom:Minestom:d7feed23c8")
+    implementation("dev.emortal.immortal:Immortal:3.0.1")
+//    compileOnly("com.github.EmortalMC:Immortal:27425f94df")
 
-    //implementation("com.github.EmortalMC:TNT:34bae5bb0c")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
 
 }
 
 tasks {
-    processResources {
-        filesMatching("extension.json") {
-            expand(project.properties)
-        }
-    }
 
     named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+        manifest {
+            attributes (
+                "Main-Class" to "dev.emortal.parkourtag.ParkourTagMainKt",
+                "Multi-Release" to true
+            )
+        }
+
+        transform(com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer::class.java)
+
         archiveBaseName.set(project.name)
         mergeServiceFiles()
-        minimize()
+
+
+//        minimize()
+    }
+
+    withType<AbstractArchiveTask> {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
     }
 
     build {

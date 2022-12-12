@@ -6,7 +6,6 @@ import dev.emortal.parkourtag.game.ParkourTagGame
 import net.minestom.server.command.builder.Command
 import net.minestom.server.entity.Player
 import world.cepi.kstom.command.arguments.ArgumentPlayer
-import world.cepi.kstom.command.kommand.Kommand
 
 object RigCommand : Command("rig") {
 
