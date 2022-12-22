@@ -7,6 +7,7 @@ import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagMain
+import kotlinx.coroutines.NonCancellable.cancel
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -39,6 +40,7 @@ import net.minestom.server.potion.PotionEffect
 import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
+import net.minestom.server.timer.TaskSchedule
 import org.tinylog.kotlin.Logger
 import world.cepi.kstom.Manager
 import world.cepi.kstom.adventure.asMini
@@ -128,10 +130,9 @@ class ParkourTagGame : PvpGame() {
             return
         }
 
-        val nonSpectators = players.filter { it.hasTag(GameManager.spectatingTag) }
-        if (nonSpectators.size <= 1) {
-            if (nonSpectators.isNotEmpty()) {
-                victory(nonSpectators.first())
+        if (players.size <= 1) {
+            if (players.isNotEmpty()) {
+                victory(players.first())
             }
         }
     }
@@ -140,90 +141,88 @@ class ParkourTagGame : PvpGame() {
 
         scoreboard?.updateLineContent("infoLine", Component.text("Rolling...", NamedTextColor.GRAY))
 
-        object : MinestomRunnable(repeat = Duration.ofMillis(50), group = runnableGroup) {
-            var picked = players.random()
-            val offset = ThreadLocalRandom.current().nextInt(players.size)
+        var picked = players.random()
+        val offset = ThreadLocalRandom.current().nextInt(players.size)
 
-            var nameIter = 0 // max 17
-            var ticksUntil = 1
-
-            override fun run() {
-                if (gameState == GameState.ENDING || players.isEmpty()) {
-                    cancel()
-                    return
-                }
-
-                ticksUntil--
-
-                if (ticksUntil == 0) {
-                    if (nameIter == 17) {
-                        cancel()
-                        cancelled()
-                        return
-                    }
-
-                    ticksUntil = (nameIter / 1.2).toInt().coerceAtLeast(1)
-
-                    picked.isGlowing = false
-                    picked = players.elementAt(((nameIter + offset) % players.size))
-                    picked.isGlowing = true
-
-                    playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
-                    showTitle(
-                        Title.title(
-                            Component.text(picked.username),
-                            Component.empty(),
-                            Title.Times.times(
-                                Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)
-                            )
-                        )
-                    )
-
-                    nameIter++
-                }
+        var nameIter = 0 // max 17
+        var ticksUntil = 1
+        instance!!.scheduler().submitTask {
+            if (gameState == GameState.ENDING || players.isEmpty()) {
+                return@submitTask TaskSchedule.stop()
             }
 
-            override fun cancelled() {
-                val tagger = if (riggedPlayer == null) {
-                    picked
-                } else {
-                    picked.isGlowing = false
-                    riggedPlayer!!.isGlowing = true
-                    riggedPlayer!!
-                }
+            ticksUntil--
 
-                object : MinestomRunnable(repeat = Duration.ofMillis(100), iterations = 10*3, group = runnableGroup) {
-                    override fun run() {
+            if (ticksUntil == 0) {
+                if (nameIter == 17) {
+                    val tagger = if (riggedPlayer == null) {
+                        picked
+                    } else {
+                        picked.isGlowing = false
+                        riggedPlayer!!.isGlowing = true
+                        riggedPlayer!!
+                    }
+
+                    var i = 0
+
+                    instance!!.scheduler().submitTask {
+                        if (i > 30) {
+                            return@submitTask TaskSchedule.stop()
+                        }
                         showTitle(
                             Title.title(
-                                "<rainbow:${currentIteration}>${tagger.username}".asMini(),
+                                "<rainbow:${i}>${tagger.username}".asMini(),
                                 Component.text("is the tagger", NamedTextColor.GRAY),
                                 Title.Times.times(
                                     Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(500)
                                 )
                             )
                         )
+                        i++
+
+                        TaskSchedule.tick(2)
                     }
+
+                    playSound(
+                        Sound.sound(
+                            SoundEvent.ENTITY_ENDER_DRAGON_GROWL,
+                            Sound.Source.HOSTILE,
+                            1f,
+                            1f
+                        )
+                    )
+
+                    taggersTeam.add(tagger)
+
+                    scoreboard?.updateLineContent("infoLine", Component.empty())
+
+                    Manager.scheduler.buildTask {
+                        setupGame()
+                    }.delay(Duration.ofSeconds(3)).schedule()
+                    return@submitTask TaskSchedule.stop()
                 }
 
+                ticksUntil = (nameIter / 1.2).toInt().coerceAtLeast(1)
 
-                playSound(
-                    Sound.sound(
-                        SoundEvent.ENTITY_ENDER_DRAGON_GROWL,
-                        Sound.Source.HOSTILE,
-                        1f,
-                        1f
+                picked.isGlowing = false
+                picked = players.elementAt(((nameIter + offset) % players.size))
+                picked.isGlowing = true
+
+                playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_SNARE, Sound.Source.BLOCK, 1f, 1f))
+                showTitle(
+                    Title.title(
+                        Component.text(picked.username),
+                        Component.empty(),
+                        Title.Times.times(
+                            Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(200)
+                        )
                     )
                 )
 
-                taggersTeam.add(tagger)
-
-                scoreboard?.updateLineContent("infoLine", Component.empty())
-
-                Manager.scheduler.buildTask {
-                    setupGame()
-                }.delay(Duration.ofSeconds(3)).schedule()
+                nameIter++
             }
+
+            TaskSchedule.nextTick()
         }
     }
 
@@ -309,16 +308,19 @@ class ParkourTagGame : PvpGame() {
                 player.position
             )
 
-            object : MinestomRunnable(repeat = Duration.ofSeconds(1), iterations = 3, group = runnableGroup) {
-                override fun run() {
-                    player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${iterations - currentIteration.get()}s".asMini())
-                }
-
-                override fun cancelled() {
+            var i = 0
+            player.scheduler().submitTask {
+                if (i >= 3) {
                     player.isAllowFlying = true
                     player.sendActionBar(Component.empty())
                     player.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 0.7f, 0.8f), Sound.Emitter.self())
                 }
+
+                player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${3 - i}s".asMini())
+
+                i++
+
+                TaskSchedule.seconds(1)
             }
 
         }
@@ -483,104 +485,125 @@ class ParkourTagGame : PvpGame() {
         val doubleJumpTime = glowingTime / 2 // 15 seconds with 8 players, 9 with 2
         val playTime = 240 / (12 - playerCount) // 60 seconds with 8 players, 24 with 2
 
-        object : MinestomRunnable(repeat = Duration.ofSeconds(1), delay = Duration.ofMillis(50), iterations = 90, group = runnableGroup) {
-            override fun run() {
-                val currentIter = currentIteration.get()
-                val timeLeft = (iterations - currentIter) - 1
+        var i = 0
+        instance!!.scheduler().submitTask {
+            val timeLeft = (90 - i) - 1
 
-                if (timeLeft > glowingTime) {
-                    scoreboard?.updateLineContent(
-                        "time_left2",
-                        Component.text()
-                            .append(Component.text("Glowing: ", TextColor.color(59, 128, 59)))
-                            .append(Component.text((timeLeft - glowingTime).parsed(), NamedTextColor.GREEN))
-                            .build()
-                    )
-                } else if (timeLeft > doubleJumpTime) {
-                    scoreboard?.updateLineContent(
-                        "time_left2",
-                        Component.text()
-                            .append(Component.text("Double jump: ", TextColor.color(59, 128, 59)))
-                            .append(Component.text((timeLeft - doubleJumpTime).parsed(), NamedTextColor.GREEN))
-                            .build()
-                    )
-                }
-
-                when {
-                    timeLeft == doubleJumpTime -> {
-                        taggersTeam.players.forEach {
-                            it.isAllowFlying = true
-                        }
-
-                        scoreboard?.removeLine("time_left2")
-
-                        playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
-                        showTitle(
-                            Title.title(
-                                Component.empty(),
-                                Component.text("Double jump has been enabled!", NamedTextColor.GRAY),
-                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                            )
-                        )
-                    }
-                    timeLeft == glowingTime -> {
-                        goonsTeam.players.forEach {
-                            it.isGlowing = true
-                        }
-                        playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
-                        showTitle(
-                            Title.title(
-                                Component.empty(),
-                                Component.text("Goons are now glowing!", NamedTextColor.GRAY),
-                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                            )
-                        )
-                    }
-                    timeLeft == (doubleJumpTime + 10) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
-                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
-                        showTitle(
-                            Title.title(
-                                Component.empty(),
-                                Component.text("Double jump will be enabled in ${timeLeft - doubleJumpTime} seconds!", NamedTextColor.GRAY),
-                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                            )
-                        )
-                    }
-                    timeLeft == (glowingTime + 10) || (timeLeft <= (glowingTime + 5) && timeLeft > glowingTime) -> {
-                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
-                        showTitle(
-                            Title.title(
-                                Component.empty(),
-                                Component.text("Goons will glow in ${timeLeft - glowingTime} seconds!", NamedTextColor.GRAY),
-                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                            )
-                        )
-                    }
-                    timeLeft == 0 -> {
-                        //Logger.warn("Ran out of time - iter: ${currentIteration}")`
-                        victory(goonsTeam)
-                        return
-                    }
-                    timeLeft < 10L -> {
-                        playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.AMBIENT, 1f, 1f))
-                        showTitle(
-                            Title.title(
-                                Component.empty(),
-                                Component.text(timeLeft, NamedTextColor.GOLD),
-                                Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
-                            )
-                        )
-                    }
-                    else -> {}
-                }
-                scoreboard!!.updateLineContent(
-                    "time_left",
+            if (timeLeft > glowingTime) {
+                scoreboard?.updateLineContent(
+                    "time_left2",
                     Component.text()
-                        .append(Component.text("Time left: ", TextColor.color(59, 128, 59)))
-                        .append(Component.text(timeLeft.parsed(), NamedTextColor.GREEN))
+                        .append(Component.text("Glowing: ", TextColor.color(59, 128, 59)))
+                        .append(Component.text((timeLeft - glowingTime).parsed(), NamedTextColor.GREEN))
+                        .build()
+                )
+            } else if (timeLeft > doubleJumpTime) {
+                scoreboard?.updateLineContent(
+                    "time_left2",
+                    Component.text()
+                        .append(Component.text("Double jump: ", TextColor.color(59, 128, 59)))
+                        .append(Component.text((timeLeft - doubleJumpTime).parsed(), NamedTextColor.GREEN))
                         .build()
                 )
             }
+
+            when {
+                timeLeft == doubleJumpTime -> {
+                    taggersTeam.players.forEach {
+                        it.isAllowFlying = true
+                    }
+
+                    scoreboard?.removeLine("time_left2")
+
+                    playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
+                    taggersTeam.showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("You can now double jump!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                    goonsTeam.showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("The tagger can now double jump!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                }
+                timeLeft == glowingTime -> {
+                    goonsTeam.players.forEach {
+                        it.isGlowing = true
+                    }
+                    playSound(Sound.sound(SoundEvent.ENTITY_PLAYER_LEVELUP, Sound.Source.MASTER, 1f, 0.8f))
+                    taggersTeam.showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("Goons are now glowing!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                    goonsTeam.showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("You are now glowing!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                }
+                timeLeft == (doubleJumpTime + 10) || (timeLeft <= (doubleJumpTime + 5) && timeLeft > doubleJumpTime) -> {
+                    playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
+                    showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("Double jump will be enabled in ${timeLeft - doubleJumpTime} seconds!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                }
+                timeLeft == (glowingTime + 10) || (timeLeft <= (glowingTime + 5) && timeLeft > glowingTime) -> {
+                    playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.MASTER, 1f, 2f))
+                    taggersTeam.showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("Goons will glow in ${timeLeft - glowingTime} seconds!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                    goonsTeam.showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text("You will glow in ${timeLeft - glowingTime} seconds!", NamedTextColor.GRAY),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                }
+                timeLeft == 0 -> {
+                    //Logger.warn("Ran out of time - iter: ${currentIteration}")`
+                    victory(goonsTeam)
+                    return@submitTask TaskSchedule.stop()
+                }
+                timeLeft < 10L -> {
+                    playSound(Sound.sound(SoundEvent.BLOCK_WOODEN_BUTTON_CLICK_ON, Sound.Source.AMBIENT, 1f, 1f))
+                    showTitle(
+                        Title.title(
+                            Component.empty(),
+                            Component.text(timeLeft, NamedTextColor.GOLD),
+                            Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2))
+                        )
+                    )
+                }
+                else -> {}
+            }
+            scoreboard!!.updateLineContent(
+                "time_left",
+                Component.text()
+                    .append(Component.text("Time left: ", TextColor.color(59, 128, 59)))
+                    .append(Component.text(timeLeft.parsed(), NamedTextColor.GREEN))
+                    .build()
+            )
+
+            TaskSchedule.seconds(1)
         }
     }
 
