@@ -8,8 +8,8 @@ import dev.emortal.parkourtag.game.ParkourTagGame
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.minestom.server.MinecraftServer
 import org.tinylog.kotlin.Logger
-import world.cepi.kstom.command.register
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -38,7 +38,8 @@ fun main() {
         showsInSlashPlay = true
     )
 
-    RigCommand.register()
+    val cm = MinecraftServer.getCommandManager()
+    cm.register(RigCommand)
 }
 
 class ParkourTagMain {

@@ -1,8 +1,8 @@
 package dev.emortal.parkourtag
 
+import dev.emortal.immortal.serializer.PositionSerializer
 import kotlinx.serialization.Serializable
 import net.minestom.server.coordinate.Pos
-import world.cepi.kstom.serializer.PositionSerializer
 
 @Serializable
 data class MapConfig(

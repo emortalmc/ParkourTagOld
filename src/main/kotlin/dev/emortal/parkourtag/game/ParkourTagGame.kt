@@ -1,13 +1,11 @@
 package dev.emortal.parkourtag.game
 
-import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
 import dev.emortal.immortal.util.*
 import dev.emortal.parkourtag.MapConfig
 import dev.emortal.parkourtag.ParkourTagMain
-import kotlinx.coroutines.NonCancellable.cancel
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.sound.Sound.Emitter
 import net.kyori.adventure.text.Component
@@ -16,6 +14,7 @@ import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
+import net.minestom.server.MinecraftServer
 import net.minestom.server.color.Color
 import net.minestom.server.coordinate.Pos
 import net.minestom.server.coordinate.Vec
@@ -42,11 +41,6 @@ import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
 import org.tinylog.kotlin.Logger
-import world.cepi.kstom.Manager
-import world.cepi.kstom.adventure.asMini
-import world.cepi.kstom.adventure.sendMiniMessage
-import world.cepi.kstom.event.listenOnly
-import world.cepi.kstom.util.playSound
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -82,6 +76,10 @@ class ParkourTagGame : PvpGame() {
     override val showsJoinLeaveMessages: Boolean = true
     override val allowsSpectators: Boolean = true
 
+    private val miniMessage = MiniMessage.miniMessage()
+
+    private val booped = Tag.Boolean("booped")
+    private val launchCooldownTag = Tag.Boolean("launchCooldown")
 
     override fun getSpawnPosition(player: Player, spectator: Boolean): Pos = Pos(0.5, 65.0, 0.5)
 
@@ -104,9 +102,9 @@ class ParkourTagGame : PvpGame() {
         player.sendMessage(
             Component.text()
                 .append(Component.text("${centerSpaces("Welcome to Parkour Tag")}Welcome to ", NamedTextColor.GRAY))
-                .append(MiniMessage.miniMessage().deserialize("<green><bold>Parkour Tag"))
+                .append(miniMessage.deserialize("<green><bold>Parkour Tag"))
                 .append(
-                    MiniMessage.miniMessage().deserialize("\n\n" +
+                    miniMessage.deserialize("\n\n" +
                         "<yellow>Parkour Tag is a simple game of <color:#ffcc55>hide and seek</color>." +
                         "\nAt the start of the game you are assigned <red><bold>Tagger</bold></red> or <green><bold>Goon</bold></green>." +
                         "\nLeft click on players to tag them!"
@@ -171,7 +169,7 @@ class ParkourTagGame : PvpGame() {
                         }
                         showTitle(
                             Title.title(
-                                "<rainbow:${i}>${tagger.username}".asMini(),
+                                miniMessage.deserialize("<rainbow:${i}>${tagger.username}"),
                                 Component.text("is the tagger", NamedTextColor.GRAY),
                                 Title.Times.times(
                                     Duration.ZERO, Duration.ofMillis(500), Duration.ofMillis(500)
@@ -196,7 +194,7 @@ class ParkourTagGame : PvpGame() {
 
                     scoreboard?.updateLineContent("infoLine", Component.empty())
 
-                    Manager.scheduler.buildTask {
+                    instance!!.scheduler().buildTask {
                         setupGame()
                     }.delay(Duration.ofSeconds(3)).schedule()
                     return@submitTask TaskSchedule.stop()
@@ -226,19 +224,18 @@ class ParkourTagGame : PvpGame() {
         }
     }
 
-    override fun registerEvents(eventNode: EventNode<InstanceEvent>) = with(eventNode) {
-        val booped = Tag.Boolean("booped")
-        listenOnly<EntityAttackEvent> {
-            if (target !is Player || entity !is Player || !canHitPlayers.get()) return@listenOnly
+    override fun registerEvents(eventNode: EventNode<InstanceEvent>) {
+        eventNode.addListener(EntityAttackEvent::class.java) { e ->
+            if (e.target !is Player || e.entity !is Player || !canHitPlayers.get()) return@addListener
 
-            val target = target as Player
-            val attacker = entity as Player
+            val target = e.target as Player
+            val attacker = e.entity as Player
 
-            if (target.gameMode != GameMode.ADVENTURE || attacker.gameMode != GameMode.ADVENTURE) return@listenOnly
+            if (target.gameMode != GameMode.ADVENTURE || attacker.gameMode != GameMode.ADVENTURE) return@addListener
 
             // booping hehe
             if (!taggersTeam.players.contains(attacker) && taggersTeam.players.contains(target)) {
-                if (attacker.hasTag(booped)) return@listenOnly
+                if (attacker.hasTag(booped)) return@addListener
                 attacker.setTag(booped, true)
                 attacker.sendMessage(Component.text("You booped ${target.username}!", NamedTextColor.GREEN))
                 attacker.playSound(Sound.sound(SoundEvent.ENTITY_DONKEY_CHEST, Sound.Source.MASTER, 1f, 2f), target.position)
@@ -251,20 +248,22 @@ class ParkourTagGame : PvpGame() {
                     target.playSound(Sound.sound(SoundEvent.ENTITY_DONKEY_CHEST, Sound.Source.MASTER, 1f, 2f), attacker.position)
                 }.delay(Duration.ofSeconds(3)).schedule()
 
-                return@listenOnly
+                return@addListener
             }
 
             if (taggersTeam.players.contains(attacker) && !taggersTeam.players.contains(target)) {
                 val minDistance = target.position.add(0.0, 1.5, 0.0).distanceSquared(attacker.position.add(0.0, 1.5, 0.0))
                     .coerceAtMost(target.position.distanceSquared(attacker.position.add(0.0, 1.5, 0.0)))
-                if (minDistance > 4.5*4.5) return@listenOnly
+                if (minDistance > 4.5*4.5) return@addListener
 
                 kill(target, attacker)
             }
         }
 
-        val launchCooldownTag = Tag.Boolean("launchCooldown")
-        listenOnly<PlayerTickEvent> {
+
+        eventNode.addListener(PlayerTickEvent::class.java) { e ->
+            val player = e.player
+
             if (taggersTeam.players.contains(player)) {
                 goonsTeam.players.forEach { goon ->
                     val distance = goon.position.distanceSquared(player.position)
@@ -282,7 +281,7 @@ class ParkourTagGame : PvpGame() {
                         .compare(Block.STRUCTURE_VOID))
                     || player.instance!!.getBlock(player.position).compare(Block.AMETHYST_CLUSTER)
                 ) {
-                    if (player.hasTag(launchCooldownTag)) return@listenOnly
+                    if (player.hasTag(launchCooldownTag)) return@addListener
 
                     player.playSound(Sound.sound(SoundEvent.ENTITY_BAT_TAKEOFF, Sound.Source.MASTER, 0.5f, 0.8f))
                     player.velocity = Vec(0.0, 22.5, 0.0)
@@ -292,8 +291,9 @@ class ParkourTagGame : PvpGame() {
             }
         }
 
-        listenOnly<PlayerStartFlyingEvent> {
-            if (!taggersTeam.players.contains(player)) return@listenOnly
+        eventNode.addListener(PlayerStartFlyingEvent::class.java) { e ->
+            val player = e.player
+            if (!taggersTeam.players.contains(player)) return@addListener
 
             player.isFlying = false
             player.isAllowFlying = false
@@ -314,9 +314,10 @@ class ParkourTagGame : PvpGame() {
                     player.isAllowFlying = true
                     player.sendActionBar(Component.empty())
                     player.playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.MASTER, 0.7f, 0.8f), Sound.Emitter.self())
+                    return@submitTask TaskSchedule.stop()
                 }
 
-                player.sendActionBar("<gray>Double jump is on cooldown for <bold><red>${3 - i}s".asMini())
+                player.sendActionBar(miniMessage.deserialize("<gray>Double jump is on cooldown for <bold><red>${3 - i}s"))
 
                 i++
 
@@ -345,7 +346,7 @@ class ParkourTagGame : PvpGame() {
         )
 
         if (killer != null && killer is Player) {
-            sendMiniMessage(" <red>☠</red> <dark_gray>|</dark_gray> <gray><white>${killer.username}</white> tagged <red>${player.username}</red>")
+            sendMessage(miniMessage.deserialize(" <red>☠</red> <dark_gray>|</dark_gray> <gray><white>${killer.username}</white> tagged <red>${player.username}</red>"))
         }
         playSound(Sound.sound(SoundEvent.BLOCK_NOTE_BLOCK_PLING, Sound.Source.AMBIENT, 1f, 1f))
 
@@ -443,17 +444,13 @@ class ParkourTagGame : PvpGame() {
             )
         )
 
-        Manager.scheduler.buildTask { registerEvents(instance!!.eventNode()) }
-            .delay(Duration.ofSeconds(2))
-            .schedule()
-
         taggersTeam.players.forEach {
             it.updateViewerRule { viewEnt -> viewEnt.entityId == holdingEntity.entityId }
         }
 
         countDownFinished.set(true)
 
-        Manager.scheduler.buildTask {
+        instance!!.scheduler().buildTask {
 
             taggersTeam.players.forEach {
                 it.updateViewerRule { true }
@@ -480,6 +477,7 @@ class ParkourTagGame : PvpGame() {
     }
 
     private fun startTimer() {
+        Logger.info("Timer started")
         val playerCount = players.size
         val glowingTime = 15 + ((playerCount * 15) / 8) // 30 seconds with 8 players, 18 with 2
         val doubleJumpTime = glowingTime / 2 // 15 seconds with 8 players, 9 with 2
@@ -603,14 +601,13 @@ class ParkourTagGame : PvpGame() {
                     .build()
             )
 
+            i++
             TaskSchedule.seconds(1)
         }
     }
 
     override fun gameWon(winningPlayers: Collection<Player>) {
         canHitPlayers.set(false)
-
-        runnableGroup.cancelAll()
 
         val taggersWon = goonsTeam.players.isEmpty()
 
@@ -642,7 +639,7 @@ class ParkourTagGame : PvpGame() {
             .collect(Collectors.toSet())
             .random()
 
-        val newInstance = Manager.instance.createInstanceContainer()
+        val newInstance = MinecraftServer.getInstanceManager().createInstanceContainer()
 
         newInstance.chunkLoader = AnvilLoader(randomMap)
 
