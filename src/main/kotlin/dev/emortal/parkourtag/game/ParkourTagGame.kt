@@ -309,7 +309,7 @@ class ParkourTagGame : PvpGame() {
             )
 
             var i = 0
-            player.scheduler().submitTask {
+            e.instance.scheduler().submitTask {
                 if (i >= 3) {
                     player.isAllowFlying = true
                     player.sendActionBar(Component.empty())
