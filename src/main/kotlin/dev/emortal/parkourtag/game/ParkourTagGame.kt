@@ -1,5 +1,6 @@
 package dev.emortal.parkourtag.game
 
+import dev.emortal.immortal.game.GameManager
 import dev.emortal.immortal.game.GameState
 import dev.emortal.immortal.game.PvpGame
 import dev.emortal.immortal.game.Team
@@ -30,6 +31,7 @@ import net.minestom.server.event.trait.InstanceEvent
 import net.minestom.server.instance.AnvilLoader
 import net.minestom.server.instance.Chunk
 import net.minestom.server.instance.Instance
+import net.minestom.server.instance.SharedInstance
 import net.minestom.server.instance.block.Block
 import net.minestom.server.item.firework.FireworkEffect
 import net.minestom.server.item.firework.FireworkEffectType
@@ -40,7 +42,7 @@ import net.minestom.server.scoreboard.Sidebar
 import net.minestom.server.sound.SoundEvent
 import net.minestom.server.tag.Tag
 import net.minestom.server.timer.TaskSchedule
-import org.tinylog.kotlin.Logger
+import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -52,7 +54,11 @@ import kotlin.io.path.nameWithoutExtension
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+private val LOGGER = LoggerFactory.getLogger(ParkourTagGame::class.java)
+
 class ParkourTagGame : PvpGame() {
+
+
     private val goonsTeam =
         Team(
             "Goons",
@@ -75,6 +81,10 @@ class ParkourTagGame : PvpGame() {
     override val showScoreboard: Boolean = true
     override val showsJoinLeaveMessages: Boolean = true
     override val allowsSpectators: Boolean = true
+
+    override val gameName = "parkourtag"
+    override val gameComponent = Component.text("ParkourTag", NamedTextColor.GREEN, TextDecoration.BOLD)
+
 
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -333,11 +343,11 @@ class ParkourTagGame : PvpGame() {
 
         if (taggersTeam.players.isEmpty()) {
             victory(goonsTeam)
-            Logger.warn("Taggers died")
+            LOGGER.warn("Taggers died")
         }
         if (goonsTeam.players.isEmpty()) {
             victory(taggersTeam)
-            Logger.warn("goons died")
+            LOGGER.warn("goons died")
         }
 
         scoreboard!!.updateLineContent(
@@ -477,7 +487,6 @@ class ParkourTagGame : PvpGame() {
     }
 
     private fun startTimer() {
-        Logger.info("Timer started")
         val playerCount = players.size
         val glowingTime = 15 + ((playerCount * 15) / 8) // 30 seconds with 8 players, 18 with 2
         val doubleJumpTime = glowingTime / 2 // 15 seconds with 8 players, 9 with 2
@@ -633,40 +642,17 @@ class ParkourTagGame : PvpGame() {
     }
 
     override fun instanceCreate(): CompletableFuture<Instance> {
-        val instanceFuture = CompletableFuture<Instance>()
+        val randomInstance = ParkourTagMain.instances.random()
+        mapConfig = ParkourTagMain.config.mapSpawnPositions[randomInstance.getTag(ParkourTagMain.mapNameTag)] ?: MapConfig()
 
-        val randomMap = Files.list(Path.of("./maps/parkourtag/"))
-            .collect(Collectors.toSet())
-            .random()
+        val shared = MinecraftServer.getInstanceManager().createSharedInstance(randomInstance)
+        shared.setTag(GameManager.doNotAutoUnloadChunkTag, true)
 
-        val newInstance = MinecraftServer.getInstanceManager().createInstanceContainer()
+        shared.time = 0
+        shared.timeRate = 0
+        shared.timeUpdate = null
 
-        newInstance.chunkLoader = AnvilLoader(randomMap)
-
-        mapConfig = ParkourTagMain.config.mapSpawnPositions[randomMap.nameWithoutExtension] ?: MapConfig()
-
-        newInstance.time = 0
-        newInstance.timeRate = 0
-        newInstance.timeUpdate = null
-
-        newInstance.enableAutoChunkLoad(false)
-        newInstance.setTag(Tag.Boolean("doNotAutoUnloadChunk"), true)
-
-        val radius = 5
-        val chunkFutures = mutableListOf<CompletableFuture<Chunk>>()
-        var i = 0
-        for (x in -radius..radius) {
-            for (z in -radius..radius) {
-                chunkFutures.add(newInstance.loadChunk(x, z))
-                i++
-            }
-        }
-
-        CompletableFuture.allOf(*chunkFutures.toTypedArray()).thenRun {
-            instanceFuture.complete(newInstance)
-        }
-
-        return instanceFuture
+        return CompletableFuture.completedFuture(shared)
     }
 
 }
